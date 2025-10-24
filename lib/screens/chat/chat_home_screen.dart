@@ -4,6 +4,10 @@ import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../data/mock/mock_consult_history.dart';
+import '../../data/models/consulta.dart';
+import '../../utils/topic_theme_helper.dart';
+import 'chat_active_screen.dart';
 
 /// SCR-CONS-START: Pantalla de inicio de Consulta Express
 /// PROC-005: Consulta Express IA
@@ -104,7 +108,12 @@ class ChatHomeScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: FilledButton(
         onPressed: () {
-          // TODO: Navegar a SCR-CONS-CHAT (pantalla de chat)
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChatActiveScreen(),
+            ),
+          );
         },
         style: FilledButton.styleFrom(
           minimumSize: const Size(double.infinity, 56),
@@ -131,8 +140,9 @@ class ChatHomeScreen extends StatelessWidget {
 
   /// Sección de historial de consultas
   Widget _buildHistorySection(BuildContext context) {
-    // TODO: Conectar con datos mock
-    final hasHistory = true;
+    // Cargar historial de consultas desde mock
+    final historial = MockConsultHistory.getHistorialConsultas();
+    final hasHistory = historial.isNotEmpty;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,10 +156,16 @@ class ChatHomeScreen extends StatelessWidget {
                 'Consultas recientes',
                 style: AppTypography.h2,
               ),
-              if (hasHistory)
+              if (hasHistory && historial.length > 3)
                 TextButton(
                   onPressed: () {
-                    // TODO: Navegar a historial completo
+                    // Futuro: Mostrar modal con todas las consultas si hay más de 3
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Mostrando ${historial.length} consultas recientes'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
                   },
                   child: const Text('Ver todo'),
                 ),
@@ -169,36 +185,18 @@ class ChatHomeScreen extends StatelessWidget {
             ),
           )
         else
-          Column(
-            children: [
-              _buildHistoryCard(
-                petName: 'Luna',
-                petPhoto: null,
-                question: '¿Cuándo debo vacunar a mi cachorro?',
-                preview: 'Es recomendable iniciar el esquema de vacunación a las 6-8 semanas...',
-                date: 'Hace 2 días',
-                questionIcon: Icons.vaccines,
-                questionColor: AppColors.warning,
-              ),
-              _buildHistoryCard(
-                petName: 'Max',
-                petPhoto: null,
-                question: '¿Es normal que mi gato duerma tanto?',
-                preview: 'Los gatos adultos suelen dormir entre 12 y 16 horas al día...',
-                date: 'Hace 1 semana',
-                questionIcon: Icons.bedtime,
-                questionColor: AppColors.info,
-              ),
-              _buildHistoryCard(
-                petName: 'Coco',
-                petPhoto: null,
-                question: 'Recomendaciones para el baño de mi perro',
-                preview: 'El baño de los perros se recomienda cada 3-4 semanas...',
-                date: 'Hace 2 semanas',
-                questionIcon: Icons.shower,
-                questionColor: AppColors.primary,
-              ),
-            ],
+          // Renderizar historial dinámicamente desde mock
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: historial.length,
+            itemBuilder: (context, index) {
+              final consulta = historial[index];
+              return _buildHistoryCard(
+                context: context,
+                consulta: consulta,
+              );
+            },
           ),
       ],
     );
@@ -206,17 +204,23 @@ class ChatHomeScreen extends StatelessWidget {
 
   /// Card de historial de consulta
   Widget _buildHistoryCard({
-    required String petName,
-    String? petPhoto,
-    required String question,
-    required String preview,
-    required String date,
-    required IconData questionIcon,
-    required Color questionColor,
+    required BuildContext context,
+    required Consulta consulta,
   }) {
+    // Mapear topic a icono y color
+    final Map<String, dynamic> topicTheme = TopicThemeHelper.getTheme(consulta.topic);
+    
     return AppCard(
       onTap: () {
-        // TODO: Navegar a detalle de la consulta (SCR-CONS-CHAT con historial)
+        // Navegar a chat con consulta existente (readonly)
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatActiveScreen(
+              consultId: consulta.id,
+            ),
+          ),
+        );
       },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,12 +230,12 @@ class ChatHomeScreen extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: questionColor.withValues(alpha: 0.1),
+              color: topicTheme['color'].withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
             ),
             child: Icon(
-              questionIcon,
-              color: questionColor,
+              topicTheme['icon'],
+              color: topicTheme['color'],
               size: 24,
             ),
           ),
@@ -246,27 +250,21 @@ class ChatHomeScreen extends StatelessWidget {
                 // Mascota y fecha
                 Row(
                   children: [
-                    // Avatar de mascota (placeholder)
-                    if (petPhoto != null)
-                      CircleAvatar(
-                        radius: 10,
-                        backgroundImage: NetworkImage(petPhoto),
-                      )
-                    else
-                      CircleAvatar(
-                        radius: 10,
-                        backgroundColor: AppColors.surfaceVariant,
-                        child: Icon(
-                          Icons.pets,
-                          size: 12,
-                          color: AppColors.primary,
-                        ),
+                    // Avatar de mascota
+                    CircleAvatar(
+                      radius: 10,
+                      backgroundColor: AppColors.surfaceVariant,
+                      child: Icon(
+                        Icons.pets,
+                        size: 12,
+                        color: AppColors.primary,
                       ),
+                    ),
                     
                     const SizedBox(width: 4),
                     
                     Text(
-                      petName,
+                      consulta.petName,
                       style: AppTypography.caption.copyWith(
                         color: AppColors.textSecondary,
                         fontWeight: FontWeight.w600,
@@ -276,7 +274,7 @@ class ChatHomeScreen extends StatelessWidget {
                     const Spacer(),
                     
                     Text(
-                      date,
+                      consulta.getRelativeDate(),
                       style: AppTypography.caption.copyWith(
                         color: AppColors.textDisabled,
                       ),
@@ -286,9 +284,9 @@ class ChatHomeScreen extends StatelessWidget {
                 
                 const SizedBox(height: AppSpacing.xs),
                 
-                // Pregunta
+                // Pregunta (summary)
                 Text(
-                  question,
+                  consulta.summary,
                   style: AppTypography.bodyBold,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -298,7 +296,7 @@ class ChatHomeScreen extends StatelessWidget {
                 
                 // Preview de respuesta
                 Text(
-                  preview,
+                  consulta.preview,
                   style: AppTypography.caption.copyWith(
                     color: AppColors.textSecondary,
                   ),

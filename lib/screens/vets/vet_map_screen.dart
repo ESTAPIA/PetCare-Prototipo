@@ -4,13 +4,22 @@ import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../data/models/veterinaria.dart';
+import '../../data/mock/mock_veterinarias.dart';
+import '../../services/favorites_service.dart';
+import 'vet_detail_screen.dart';
 
 /// SCR-VET-MAP: Mapa y lista de veterinarias
 /// PROC-004: Veterinarias Cercanas
 /// 
 /// Objetivo: Mostrar veterinarias cercanas en mapa y lista con filtros
 class VetMapScreen extends StatefulWidget {
-  const VetMapScreen({super.key});
+  /// Contexto desde donde se abrió la pantalla
+  /// null = desde tab Veterinarias
+  /// 'chat' = desde consulta (ChatActiveScreen)
+  final String? sourceContext;
+
+  const VetMapScreen({super.key, this.sourceContext});
 
   @override
   State<VetMapScreen> createState() => _VetMapScreenState();
@@ -18,13 +27,130 @@ class VetMapScreen extends StatefulWidget {
 
 class _VetMapScreenState extends State<VetMapScreen> {
   bool _showMap = true; // true: mapa, false: lista
+  List<Veterinaria> _veterinarias = [];
+  
+  // PASO E: Favoritos
+  Set<String> _favoriteIds = {};
+  final _favoritesService = FavoritesService();
+  
+  // Filtros activos
+  bool _filtroFavoritos = false;
+  bool _filtro24h = false;
+  bool _filtroPerros = false;
+  bool _filtroGatos = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadVeterinarias();
+    _loadFavorites();
+  }
+  
+  /// Carga los IDs de favoritos desde el servicio
+  Future<void> _loadFavorites() async {
+    await _favoritesService.initialize();
+    final favorites = await _favoritesService.getFavorites();
+    setState(() {
+      _favoriteIds = favorites;
+    });
+  }
+
+  /// Carga las veterinarias ordenadas por distancia
+  void _loadVeterinarias() {
+    setState(() {
+      _veterinarias = MockVeterinarias.getVeterinariasPorDistancia();
+    });
+  }
+
+  /// Aplica los filtros activos sobre las veterinarias
+  void _aplicarFiltros() {
+    List<Veterinaria> resultado = MockVeterinarias.getVeterinariasPorDistancia();
+    
+    // Filtro Favoritos
+    if (_filtroFavoritos) {
+      resultado = resultado.where((vet) => _favoriteIds.contains(vet.id)).toList();
+    }
+    
+    // Filtro 24 horas
+    if (_filtro24h) {
+      resultado = resultado.where((vet) => vet.emergencias24h).toList();
+    }
+    
+    // Filtro Perros
+    if (_filtroPerros) {
+      resultado = resultado.where((vet) => vet.atiende('Perros')).toList();
+    }
+    
+    // Filtro Gatos
+    if (_filtroGatos) {
+      resultado = resultado.where((vet) => vet.atiende('Gatos')).toList();
+    }
+    
+    setState(() {
+      _veterinarias = resultado;
+    });
+  }
+
+  /// Limpia todos los filtros activos
+  void _limpiarFiltros() {
+    setState(() {
+      _filtroFavoritos = false;
+      _filtro24h = false;
+      _filtroPerros = false;
+      _filtroGatos = false;
+    });
+    _loadVeterinarias();
+  }
+
+  /// Cuenta la cantidad de filtros activos
+  int _contarFiltrosActivos() {
+    int count = 0;
+    if (_filtroFavoritos) count++;
+    if (_filtro24h) count++;
+    if (_filtroPerros) count++;
+    if (_filtroGatos) count++;
+    return count;
+  }
+  
+  /// Toggle favorito desde la card de la lista
+  Future<void> _toggleFavoriteInCard(String vetId) async {
+    final wasAdded = await _favoritesService.toggleFavorite(vetId);
+    
+    // Actualizar estado local
+    setState(() {
+      if (wasAdded) {
+        _favoriteIds.add(vetId);
+      } else {
+        _favoriteIds.remove(vetId);
+      }
+    });
+    
+    // Feedback al usuario
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasAdded 
+              ? 'Agregado a favoritos' 
+              : 'Eliminado de favoritos',
+          ),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+    
+    // Si el filtro de favoritos está activo, re-aplicar filtros
+    if (_filtroFavoritos) {
+      _aplicarFiltros();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Veterinarias'),
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: widget.sourceContext != null, // Mostrar back si viene de otra pantalla
         actions: [
           IconButton(
             icon: Icon(_showMap ? Icons.list : Icons.map),
@@ -36,16 +162,75 @@ class _VetMapScreenState extends State<VetMapScreen> {
             tooltip: _showMap ? 'Ver lista' : 'Ver mapa',
           ),
           IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              // TODO: Mostrar bottom sheet con filtros
-            },
-            tooltip: 'Filtros',
+            icon: _contarFiltrosActivos() > 0
+                ? Badge.count(
+                    count: _contarFiltrosActivos(),
+                    child: const Icon(Icons.filter_list),
+                  )
+                : const Icon(Icons.filter_list),
+            onPressed: _limpiarFiltros,
+            tooltip: _contarFiltrosActivos() > 0 ? 'Limpiar filtros' : 'Filtros',
           ),
         ],
       ),
       body: Column(
         children: [
+          // Banner contextual si viene desde consulta
+          if (widget.sourceContext == 'chat')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                border: Border(
+                  bottom: BorderSide(
+                    color: AppColors.primary.withValues(alpha: 0.2),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.chat_outlined,
+                    size: 18,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Buscando desde tu consulta',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm,
+                        vertical: AppSpacing.xs,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: Text(
+                      'Volver al chat',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          
           // Filtros rápidos
           _buildQuickFilters(),
           
@@ -77,27 +262,51 @@ class _VetMapScreenState extends State<VetMapScreen> {
           children: [
             FilterChip(
               label: const Text('Favoritos'),
-              selected: false,
-              avatar: const Icon(Icons.star, size: 18),
-              onSelected: (selected) {},
+              selected: _filtroFavoritos,
+              avatar: Icon(
+                Icons.star,
+                size: 18,
+                color: _filtroFavoritos ? AppColors.surface : null,
+              ),
+              onSelected: (selected) {
+                setState(() {
+                  _filtroFavoritos = selected;
+                });
+                _aplicarFiltros();
+              },
             ),
             const SizedBox(width: AppSpacing.sm),
             FilterChip(
               label: const Text('24 horas'),
-              selected: false,
-              onSelected: (selected) {},
+              selected: _filtro24h,
+              onSelected: (selected) {
+                setState(() {
+                  _filtro24h = selected;
+                });
+                _aplicarFiltros();
+              },
             ),
             const SizedBox(width: AppSpacing.sm),
             FilterChip(
               label: const Text('Perros'),
-              selected: false,
-              onSelected: (selected) {},
+              selected: _filtroPerros,
+              onSelected: (selected) {
+                setState(() {
+                  _filtroPerros = selected;
+                });
+                _aplicarFiltros();
+              },
             ),
             const SizedBox(width: AppSpacing.sm),
             FilterChip(
               label: const Text('Gatos'),
-              selected: false,
-              onSelected: (selected) {},
+              selected: _filtroGatos,
+              onSelected: (selected) {
+                setState(() {
+                  _filtroGatos = selected;
+                });
+                _aplicarFiltros();
+              },
             ),
           ],
         ),
@@ -175,26 +384,22 @@ class _VetMapScreenState extends State<VetMapScreen> {
                   
                   // Lista horizontal de veterinarias
                   Expanded(
-                    child: ListView(
+                    child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                      children: [
-                        _buildVetMiniCard(
-                          name: 'Veterinaria San Marcos',
-                          distance: '0.8 km',
-                          rating: 4.5,
-                        ),
-                        _buildVetMiniCard(
-                          name: 'Clínica Veterinaria Patitas',
-                          distance: '1.2 km',
-                          rating: 4.8,
-                        ),
-                        _buildVetMiniCard(
-                          name: 'VetCenter 24H',
-                          distance: '2.1 km',
-                          rating: 4.3,
-                        ),
-                      ],
+                      itemCount: _veterinarias.length > 5 ? 5 : _veterinarias.length,
+                      itemBuilder: (context, index) {
+                        final vet = _veterinarias[index];
+                        return _buildVetMiniCard(
+                          vet: vet,
+                          name: vet.nombre,
+                          distance: vet.distanciaFormateada(
+                            MockVeterinarias.userLat,
+                            MockVeterinarias.userLng,
+                          ),
+                          rating: vet.rating,
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -208,62 +413,61 @@ class _VetMapScreenState extends State<VetMapScreen> {
 
   /// Vista de lista
   Widget _buildListView() {
-    // TODO: Conectar con datos mock
-    final hasVets = true;
-    
-    if (!hasVets) {
-      return const EmptyState(
+    if (_veterinarias.isEmpty) {
+      // Mensaje específico para filtro de favoritos vacío
+      if (_filtroFavoritos) {
+        return EmptyState(
+          icon: Icons.star_outline,
+          message: 'Aún no tienes veterinarias favoritas',
+          instruction: 'Explora y marca veterinarias como favoritas',
+          actionLabel: 'Ver todas',
+          onAction: () {
+            setState(() {
+              _filtroFavoritos = false;
+            });
+            _loadVeterinarias();
+          },
+        );
+      }
+      
+      return EmptyState(
         icon: Icons.local_hospital_outlined,
-        message: 'No hay veterinarias cercanas',
-        instruction: 'Intenta ajustar los filtros o activar tu ubicación',
+        message: _contarFiltrosActivos() > 0
+            ? 'No hay veterinarias con estos filtros'
+            : 'No hay veterinarias cercanas',
+        instruction: _contarFiltrosActivos() > 0
+            ? 'Intenta con menos filtros o límpialo todos'
+            : 'Intenta activar tu ubicación',
+        actionLabel: _contarFiltrosActivos() > 0 ? 'Limpiar filtros' : null,
+        onAction: _contarFiltrosActivos() > 0 ? _limpiarFiltros : null,
       );
     }
     
-    return ListView(
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      children: [
-        _buildVetCard(
-          name: 'Veterinaria San Marcos',
-          address: 'Av. Universitaria 123, San Miguel',
-          distance: '0.8 km',
-          rating: 4.5,
-          reviews: 120,
-          isOpen: true,
-          isFavorite: false,
-        ),
-        _buildVetCard(
-          name: 'Clínica Veterinaria Patitas',
-          address: 'Jr. Los Pinos 456, Pueblo Libre',
-          distance: '1.2 km',
-          rating: 4.8,
-          reviews: 85,
-          isOpen: true,
-          isFavorite: true,
-        ),
-        _buildVetCard(
-          name: 'VetCenter 24H',
-          address: 'Av. La Marina 789, San Miguel',
-          distance: '2.1 km',
-          rating: 4.3,
-          reviews: 200,
-          isOpen: true,
-          isFavorite: false,
-        ),
-        _buildVetCard(
-          name: 'Hospital Veterinario PetCare',
-          address: 'Av. Brasil 321, Magdalena',
-          distance: '3.5 km',
-          rating: 4.6,
-          reviews: 150,
-          isOpen: false,
-          isFavorite: false,
-        ),
-      ],
+      itemCount: _veterinarias.length,
+      itemBuilder: (context, index) {
+        final vet = _veterinarias[index];
+        return _buildVetCard(
+          vet: vet,
+          name: vet.nombre,
+          address: vet.direccion,
+          distance: vet.distanciaFormateada(
+            MockVeterinarias.userLat,
+            MockVeterinarias.userLng,
+          ),
+          rating: vet.rating,
+          reviews: vet.reviewsCount,
+          isOpen: vet.estaAbierto(),
+          isFavorite: _favoriteIds.contains(vet.id),
+        );
+      },
     );
   }
 
   /// Mini card de veterinaria (para vista mapa)
   Widget _buildVetMiniCard({
+    required Veterinaria vet,
     required String name,
     required String distance,
     required double rating,
@@ -274,7 +478,12 @@ class _VetMapScreenState extends State<VetMapScreen> {
       child: AppCard(
         padding: const EdgeInsets.all(AppSpacing.sm),
         onTap: () {
-          // TODO: Navegar a detalle
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => VetDetailScreen(veterinariaId: vet.id),
+            ),
+          );
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -316,6 +525,7 @@ class _VetMapScreenState extends State<VetMapScreen> {
 
   /// Card de veterinaria (para vista lista)
   Widget _buildVetCard({
+    required Veterinaria vet,
     required String name,
     required String address,
     required String distance,
@@ -326,7 +536,12 @@ class _VetMapScreenState extends State<VetMapScreen> {
   }) {
     return AppCard(
       onTap: () {
-        // TODO: Navegar a detalle de veterinaria
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => VetDetailScreen(veterinariaId: vet.id),
+          ),
+        );
       },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -387,9 +602,7 @@ class _VetMapScreenState extends State<VetMapScreen> {
                   isFavorite ? Icons.star : Icons.star_outline,
                   color: isFavorite ? AppColors.warning : AppColors.textSecondary,
                 ),
-                onPressed: () {
-                  // TODO: Toggle favorito
-                },
+                onPressed: () => _toggleFavoriteInCard(vet.id),
                 tooltip: 'Favorito',
               ),
             ],

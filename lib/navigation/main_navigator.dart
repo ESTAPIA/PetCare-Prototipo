@@ -115,8 +115,9 @@ class _MainNavigatorState extends State<MainNavigator> {
   /// Cambiar al tab seleccionado
   void _selectTab(int index) {
     if (_currentTabIndex == index) {
-      // Si toca el tab actual, hacer pop hasta la raíz de ese tab
-      _navigatorKeys[index].currentState?.popUntil((route) => route.isFirst);
+      // Si toca el tab actual, no hacer nada (comportamiento estándar de apps)
+      // El usuario puede usar el botón "atrás" si quiere regresar a la raíz
+      return;
     } else {
       // Cambiar al nuevo tab
       setState(() {
