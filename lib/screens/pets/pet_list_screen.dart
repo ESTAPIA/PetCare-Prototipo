@@ -5,6 +5,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../data/mock_pets.dart';
 import '../../models/pet.dart';
 import '../../widgets/common/empty_state.dart';
+import 'pet_new_screen.dart';
 
 /// SCR-PET-LIST: Pantalla de lista de mascotas (PROC-001)
 /// 
@@ -98,33 +99,19 @@ class _PetListScreenState extends State<PetListScreen> {
 
   /// Navega a la pantalla de crear nueva mascota
   /// 
-  /// PLACEHOLDER: Implementar cuando se complete PASO C
+  /// Abre formulario modal y recarga lista si se creó mascota
   Future<void> _navigateToCreatePet() async {
-    // TODO PASO C: Reemplazar con navegación real
-    // final result = await Navigator.pushNamed(context, AppRoutes.petNew);
-    // if (result == true) {
-    //   _loadPets(); // Recargar lista después de crear
-    // }
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PetNewScreen(),
+        fullscreenDialog: true, // Muestra X en lugar de <-
+      ),
+    );
     
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              Icon(Icons.info_outline, color: Colors.white, size: 20),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'Crear mascota (Disponible en PASO C)',
-                  style: TextStyle(fontSize: 14),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: AppColors.info,
-          duration: Duration(seconds: 3),
-        ),
-      );
+    // Si se creó una mascota, recargar la lista
+    if (result == true && mounted) {
+      _loadPets();
     }
   }
 
