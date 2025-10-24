@@ -3,8 +3,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../data/models/consulta.dart';
+import '../../models/reminder.dart';
 import '../../widgets/common/app_card.dart';
 import '../../utils/topic_theme_helper.dart';
+import '../reminders/reminder_new_screen.dart';
+import '../plans/plan_template_list_screen.dart';
+import '../vets/vet_map_screen.dart';
 import 'chat_active_screen.dart';
 
 /// SCR-CONS-SUMMARY: Pantalla de resumen de consulta finalizada
@@ -207,16 +211,7 @@ class ChatSummaryScreen extends StatelessWidget {
   Widget _buildActionItem(BuildContext context, String action) {
     return AppCard(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-      onTap: () {
-        // Temporal: mostrar SnackBar (navegación real en PASO F)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Acción: $action - Por implementar en PASO F'),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      },
+      onTap: () => _handleActionNavigation(context, action),
       child: Row(
         children: [
           // Ícono check
@@ -255,6 +250,53 @@ class ChatSummaryScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Manejar navegación según la acción recomendada
+  void _handleActionNavigation(BuildContext context, String action) {
+    final actionLower = action.toLowerCase();
+
+    // Detectar tipo de acción por palabras clave
+    if (actionLower.contains('recordatorio') || actionLower.contains('control')) {
+      // Navegar a crear recordatorio
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const ReminderNewScreen(
+            sourceContext: 'chat',
+            initialType: ReminderType.vaccine,
+          ),
+        ),
+      );
+    } else if (actionLower.contains('plan') || actionLower.contains('vacun')) {
+      // Navegar a plantillas de plan
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const PlanTemplateListScreen(
+            sourceContext: 'chat',
+            filterCategory: 'Vacunas',
+          ),
+        ),
+      );
+    } else if (actionLower.contains('veterinaria') || actionLower.contains('vet')) {
+      // Navegar a mapa de veterinarias
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const VetMapScreen(sourceContext: 'chat'),
+        ),
+      );
+    } else {
+      // Acción no reconocida: mostrar mensaje
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Acción "$action" no disponible aún'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   /// Mensaje de éxito
