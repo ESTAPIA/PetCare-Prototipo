@@ -52,6 +52,12 @@ dependencies:
   # Calendario para recordatorios (PROC-003)
   table_calendar: ^3.1.2
   
+  # Selector de imágenes (cámara/galería) - PROC-001
+  image_picker: ^1.0.7
+  
+  # Acceso a rutas del sistema de archivos - PROC-001
+  path_provider: ^2.1.2
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
