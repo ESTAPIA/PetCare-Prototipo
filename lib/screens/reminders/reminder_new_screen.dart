@@ -5,6 +5,8 @@ import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../models/reminder.dart';
 import '../../data/mock_reminders.dart';
+import '../../data/mock_pets.dart';
+import '../../models/pet.dart';
 
 /// SCR-REM-NEW: Crear nuevo recordatorio
 /// PROC-003: Recordatorios
@@ -31,14 +33,30 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
   TimeOfDay _selectedTime = TimeOfDay.now();
   RepeatFrequency _repeatFrequency = RepeatFrequency.none;
   late ReminderType _reminderType;
-  String _selectedPetId = 'pet-001'; // Mock: Luna
+  String? _selectedPetId; // Cambiado a nullable
   bool _isSaving = false;
+  
+  // Estado para mascotas disponibles
+  List<Pet> _availablePets = [];
+  bool _isLoadingPets = true;
 
   @override
   void initState() {
     super.initState();
     // Inicializar tipo desde parámetro o usar valor por defecto
     _reminderType = widget.initialType ?? ReminderType.other;
+    _loadPets();
+  }
+
+  /// Cargar mascotas disponibles desde el repositorio
+  Future<void> _loadPets() async {
+    final pets = await MockPetsRepository.getAllPets();
+    setState(() {
+      _availablePets = pets;
+      // Seleccionar la primera mascota si hay disponibles
+      _selectedPetId = pets.isNotEmpty ? pets.first.id : null;
+      _isLoadingPets = false;
+    });
   }
 
   @override
@@ -219,47 +237,68 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
                   ),
                   const SizedBox(height: AppSpacing.lg),
 
-                  // Mascota asignada
-                  DropdownButtonFormField<String>(
-                    value: _selectedPetId,
-                    decoration: const InputDecoration(
-                      labelText: 'Para qué mascota *',
-                      prefixIcon: Icon(Icons.pets),
+                  // Mascota asignada - Nielsen H6: Reconocimiento
+                  if (_isLoadingPets)
+                    const Center(child: CircularProgressIndicator())
+                  else if (_availablePets.isEmpty)
+                    Card(
+                      color: AppColors.warning.withOpacity(0.1),
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: AppColors.warning),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                'Necesitas crear una mascota primero',
+                                style: AppTypography.body.copyWith(
+                                  color: AppColors.warning,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      value: _selectedPetId,
+                      decoration: const InputDecoration(
+                        labelText: 'Para qué mascota *',
+                        prefixIcon: Icon(Icons.pets),
+                      ),
+                      items: _availablePets.map((pet) {
+                        return DropdownMenuItem(
+                          value: pet.id,
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 12,
+                                backgroundColor: AppColors.primary,
+                                child: Text(
+                                  pet.inicial,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.onPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('${pet.nombre} (${pet.especie.displayName})'),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedPetId = value);
+                        }
+                      },
+                      validator: (value) =>
+                          value == null ? 'Selecciona una mascota' : null,
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'pet-001',
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              child: Icon(Icons.pets, size: 12),
-                            ),
-                            SizedBox(width: 8),
-                            Text('Luna (Perra)'),
-                          ],
-                        ),
-                      ),
-                      DropdownMenuItem(
-                        value: 'pet-002',
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              child: Icon(Icons.pets, size: 12),
-                            ),
-                            SizedBox(width: 8),
-                            Text('Max (Gato)'),
-                          ],
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _selectedPetId = value);
-                      }
-                    },
-                  ),
                   const SizedBox(height: AppSpacing.lg),
 
                   // Notas (opcional)
@@ -297,7 +336,9 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed:
-                        _isFormValid && !_isSaving ? _saveReminder : null,
+                        _isFormValid && !_isSaving && !_isLoadingPets && _availablePets.isNotEmpty
+                            ? _saveReminder
+                            : null,
                     icon:
                         _isSaving
                             ? const SizedBox(
@@ -383,11 +424,24 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
       return;
     }
 
+    // Nielsen H5: Prevención de errores - validar mascota seleccionada
+    if (_selectedPetId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Debes seleccionar una mascota para el recordatorio',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     final newReminder = Reminder(
       id: 'rem-${DateTime.now().millisecondsSinceEpoch}',
-      petId: _selectedPetId,
+      petId: _selectedPetId!, // Usar ! porque ya validamos que no es null
       title: _titleController.text.trim(),
       date: DateFormat('yyyy-MM-dd').format(_selectedDate),
       time:
