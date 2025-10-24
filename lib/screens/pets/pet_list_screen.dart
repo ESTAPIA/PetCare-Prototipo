@@ -6,6 +6,7 @@ import '../../data/mock_pets.dart';
 import '../../models/pet.dart';
 import '../../widgets/common/empty_state.dart';
 import 'pet_new_screen.dart';
+import 'pet_detail_screen.dart';
 
 /// SCR-PET-LIST: Pantalla de lista de mascotas (PROC-001)
 /// 
@@ -74,27 +75,19 @@ class _PetListScreenState extends State<PetListScreen> {
 
   /// Navega a la pantalla de detalle de mascota
   /// 
-  /// PLACEHOLDER: Implementar cuando se complete PASO D
-  void _navigateToPetDetail(Pet pet) {
-    // TODO PASO D: Reemplazar con navegación real
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.white, size: 20),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                'Detalle de ${pet.nombre} (Disponible en PASO D)',
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.info,
-        duration: const Duration(seconds: 3),
+  /// Abre pantalla de detalle y recarga lista si se eliminó
+  Future<void> _navigateToPetDetail(Pet pet) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PetDetailScreen(petId: pet.id),
       ),
     );
+    
+    // Si se eliminó la mascota, recargar la lista
+    if (result == true && mounted) {
+      _loadPets();
+    }
   }
 
   /// Navega a la pantalla de crear nueva mascota
