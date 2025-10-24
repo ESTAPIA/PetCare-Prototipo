@@ -6,8 +6,10 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/consulta.dart';
 import '../../data/mock/mock_bot_service.dart';
 import '../../data/mock/mock_consult_history.dart';
+import '../../models/reminder.dart';
 import '../../widgets/chat/chat_bubble.dart';
-import '../common/action_placeholder_screen.dart';
+import '../reminders/reminder_new_screen.dart';
+import '../plans/plan_template_list_screen.dart';
 import '../vets/vet_map_screen.dart';
 import 'chat_summary_screen.dart';
 
@@ -127,38 +129,28 @@ class _ChatActiveScreenState extends State<ChatActiveScreen> {
   void _handleActionTap(MessageAction action) {
     switch (action.type) {
       case ActionType.createReminder:
-        // Navegar a pantalla de creación de recordatorio
+        // Navegar a pantalla real de creación de recordatorio (PROC-003)
+        // Pre-seleccionar tipo "vacuna" si el contexto lo sugiere
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ActionPlaceholderScreen(
-              title: 'Crear Recordatorio',
-              message: 'Aquí podrás crear recordatorios personalizados '
-                  'para vacunas, baños, desparasitación y más.\n\n'
-                  'Recibirás notificaciones para no olvidar las tareas importantes '
-                  'del cuidado de tu mascota.',
-              icon: Icons.event_note,
-              processId: 'PROC-003',
-              iconColor: AppColors.primary,
+            builder: (context) => const ReminderNewScreen(
+              sourceContext: 'chat',
+              initialType: ReminderType.vaccine,
             ),
           ),
         );
         break;
 
       case ActionType.viewPlan:
-        // Navegar a plan de cuidado
+        // Navegar a pantalla real de plantillas de plan (PROC-002)
+        // Mostrar plantillas con énfasis en vacunas
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ActionPlaceholderScreen(
-              title: 'Plan de Cuidado',
-              message: 'Aquí encontrarás plantillas de planes de cuidado '
-                  'personalizados según la edad y especie de tu mascota.\n\n'
-                  'Incluye calendario de vacunas, alimentación, '
-                  'desparasitación y cuidados generales.',
-              icon: Icons.calendar_month,
-              processId: 'PROC-002',
-              iconColor: AppColors.secondary,
+            builder: (context) => const PlanTemplateListScreen(
+              sourceContext: 'chat',
+              filterCategory: 'Vacunas',
             ),
           ),
         );

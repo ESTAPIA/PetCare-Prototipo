@@ -11,7 +11,14 @@ import 'plan_template_detail_screen.dart';
 /// SCR-PLAN-TEMPLATE-LIST: Catálogo de plantillas
 /// PROC-002: Plan de Cuidado Rápido
 class PlanTemplateListScreen extends StatefulWidget {
-  const PlanTemplateListScreen({super.key});
+  final String? sourceContext; // 'chat' si viene desde consulta
+  final String? filterCategory; // Categoría para filtrar (ej. 'Vacunas')
+
+  const PlanTemplateListScreen({
+    super.key,
+    this.sourceContext,
+    this.filterCategory,
+  });
 
   @override
   State<PlanTemplateListScreen> createState() => _PlanTemplateListScreenState();
@@ -47,10 +54,13 @@ class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Plan de cuidado rápido'),
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: widget.sourceContext != null,
       ),
       body: Column(
         children: [
+          // Banner contextual si viene desde chat
+          if (widget.sourceContext == 'chat') _buildContextBanner(),
+
           // Chip selector de mascota
           _buildPetSelector(),
 
@@ -104,6 +114,58 @@ class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
                 _loadTemplates();
               }
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Banner contextual cuando se navega desde chat
+  Widget _buildContextBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.1),
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.primary.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 16,
+            color: AppColors.primary,
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Expanded(
+            child: Text(
+              'Buscando desde tu consulta',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.arrow_back, size: 16),
+            label: const Text('Volver al chat'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm,
+                vertical: AppSpacing.xs,
+              ),
+              visualDensity: VisualDensity.compact,
+            ),
           ),
         ],
       ),

@@ -9,7 +9,14 @@ import '../../data/mock_reminders.dart';
 /// SCR-REM-NEW: Crear nuevo recordatorio
 /// PROC-003: Recordatorios
 class ReminderNewScreen extends StatefulWidget {
-  const ReminderNewScreen({super.key});
+  final String? sourceContext; // 'chat' si viene desde consulta
+  final ReminderType? initialType; // Tipo pre-seleccionado desde chat
+
+  const ReminderNewScreen({
+    super.key,
+    this.sourceContext,
+    this.initialType,
+  });
 
   @override
   State<ReminderNewScreen> createState() => _ReminderNewScreenState();
@@ -23,9 +30,16 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   RepeatFrequency _repeatFrequency = RepeatFrequency.none;
-  ReminderType _reminderType = ReminderType.other;
+  late ReminderType _reminderType;
   String _selectedPetId = 'pet-001'; // Mock: Luna
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Inicializar tipo desde parámetro o usar valor por defecto
+    _reminderType = widget.initialType ?? ReminderType.other;
+  }
 
   @override
   void dispose() {
