@@ -7,6 +7,8 @@ import '../../models/plan_template.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
 import 'plan_template_detail_screen.dart';
+import '../../data/mock_pets.dart';
+import '../../models/pet.dart';
 
 /// SCR-PLAN-TEMPLATE-LIST: Catálogo de plantillas
 /// PROC-002: Plan de Cuidado Rápido
@@ -25,13 +27,30 @@ class PlanTemplateListScreen extends StatefulWidget {
 }
 
 class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
-  String? _selectedSpecies = 'Perro'; // Mock: mascota activa es perro
+  List<Pet> _availablePets = [];
+  Pet? _selectedPet;
+  bool _isLoadingPets = true;
   bool _isLoading = true;
   List<PlanTemplate> _templates = [];
 
   @override
   void initState() {
     super.initState();
+    _loadPetsAndTemplates();
+  }
+
+  /// Cargar mascotas y luego plantillas
+  Future<void> _loadPetsAndTemplates() async {
+    setState(() => _isLoadingPets = true);
+
+    final pets = await MockPetsRepository.getAllPets();
+
+    setState(() {
+      _availablePets = pets;
+      _selectedPet = pets.isNotEmpty ? pets.first : null;
+      _isLoadingPets = false;
+    });
+
     _loadTemplates();
   }
 
@@ -43,7 +62,7 @@ class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
 
     setState(() {
       _templates = MockPlanTemplatesRepository.getTemplates(
-        species: _selectedSpecies,
+        species: _selectedPet?.especie.displayName,
       );
       _isLoading = false;
     });
@@ -78,44 +97,71 @@ class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
     );
   }
 
-  /// Selector de mascota activa (chip)
+  /// Selector de mascota activa (chips dinámicos)
   Widget _buildPetSelector() {
+    // Nielsen H1: Mostrar loading mientras carga pets
+    if (_isLoadingPets) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpacing.md),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Nielsen H10: Mensaje claro si no hay mascotas
+    if (_availablePets.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Card(
+          color: AppColors.info.withOpacity(0.1),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: AppColors.info),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Crea una mascota para ver plantillas personalizadas',
+                    style: AppTypography.body.copyWith(color: AppColors.info),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Nielsen H6: Reconocimiento - mostrar pets reales
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
-      child: Row(
-        children: [
-          const Text('Filtrar por: ', style: TextStyle(fontSize: 14)),
-          const SizedBox(width: AppSpacing.sm),
-          ChoiceChip(
-            label: const Text('Luna (Perro)'),
-            avatar: const CircleAvatar(
-              backgroundColor: Colors.transparent,
-              child: Icon(Icons.pets, size: 16),
+      child: Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        children: _availablePets.map((pet) {
+          final isSelected = _selectedPet?.id == pet.id;
+          return ChoiceChip(
+            label: Text('${pet.nombre} (${pet.especie.displayName})'),
+            avatar: CircleAvatar(
+              backgroundColor: isSelected ? AppColors.primary : Colors.transparent,
+              child: Text(
+                pet.inicial,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? AppColors.onPrimary : AppColors.primary,
+                ),
+              ),
             ),
-            selected: _selectedSpecies == 'Perro',
+            selected: isSelected,
             onSelected: (selected) {
               if (selected) {
-                setState(() => _selectedSpecies = 'Perro');
+                setState(() => _selectedPet = pet);
                 _loadTemplates();
               }
             },
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          ChoiceChip(
-            label: const Text('Max (Gato)'),
-            avatar: const CircleAvatar(
-              backgroundColor: Colors.transparent,
-              child: Icon(Icons.pets, size: 16),
-            ),
-            selected: _selectedSpecies == 'Gato',
-            onSelected: (selected) {
-              if (selected) {
-                setState(() => _selectedSpecies = 'Gato');
-                _loadTemplates();
-              }
-            },
-          ),
-        ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -306,13 +352,14 @@ class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
 
   /// Estado vacío
   Widget _buildEmptyState() {
+    final petName = _selectedPet?.nombre ?? 'esta mascota';
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: EmptyState(
         icon: Icons.calendar_today,
         message: 'No hay plantillas disponibles',
         instruction:
-            'No se encontraron plantillas para ${_selectedSpecies ?? "esta mascota"}. Prueba con otra mascota o crea recordatorios personalizados.',
+            'No se encontraron plantillas para $petName. Prueba con otra mascota o crea recordatorios personalizados.',
       ),
     );
   }
