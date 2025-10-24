@@ -38,7 +38,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   
   # Internacionalización y formateo de fechas
-  intl: ^0.19.0
+  intl: ^0.20.2
   
   # Almacenamiento local persistente
   shared_preferences: ^2.5.3
@@ -49,6 +49,9 @@ dependencies:
   # Abrir URLs externas (teléfono, email, web)
   url_launcher: ^6.3.2
 
+  # Calendario para recordatorios (PROC-003)
+  table_calendar: ^3.1.2
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter

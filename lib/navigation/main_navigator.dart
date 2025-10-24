@@ -6,14 +6,20 @@ import 'app_routes.dart';
 
 // Importar pantallas base
 import '../screens/home/home_screen.dart';
-import '../screens/plans/plan_template_list_screen.dart';
 import '../screens/reminders/reminder_list_screen.dart';
 import '../screens/vets/vet_map_screen.dart';
 import '../screens/chat/chat_home_screen.dart';
 
+// Importar pantallas de Plan
+import '../screens/plans/plan_template_list_screen.dart';
+import '../screens/plans/plan_template_detail_screen.dart';
+import '../screens/plans/plan_customize_screen.dart';
+import '../screens/plans/plan_review_screen.dart';
+import '../screens/plans/plan_success_screen.dart';
+
 /// Bottom Navigation Bar de 5 tabs para PetCare
 /// Basado en documentación: 01-mapa-navegacion.md
-/// 
+///
 /// Los 5 tabs son:
 /// 1. Inicio - Dashboard y Mascotas (PROC-001)
 /// 2. Plan - Plan de Cuidado Rápido (PROC-002)
@@ -23,7 +29,7 @@ import '../screens/chat/chat_home_screen.dart';
 class PetCareBottomNavBar extends StatelessWidget {
   /// Índice del tab actualmente seleccionado (0-4)
   final int currentIndex;
-  
+
   /// Callback cuando se selecciona un tab diferente
   final ValueChanged<int> onTabSelected;
 
@@ -53,7 +59,7 @@ class PetCareBottomNavBar extends StatelessWidget {
           label: 'Inicio',
           tooltip: 'Inicio y Mis Mascotas',
         ),
-        
+
         // TAB 2: PLAN DE CUIDADO
         BottomNavigationBarItem(
           icon: Icon(Icons.calendar_today_outlined),
@@ -61,7 +67,7 @@ class PetCareBottomNavBar extends StatelessWidget {
           label: 'Plan',
           tooltip: 'Plan de Cuidado Rápido',
         ),
-        
+
         // TAB 3: RECORDATORIOS
         BottomNavigationBarItem(
           icon: Icon(Icons.notifications_outlined),
@@ -69,7 +75,7 @@ class PetCareBottomNavBar extends StatelessWidget {
           label: 'Recordatorios',
           tooltip: 'Agenda de Recordatorios',
         ),
-        
+
         // TAB 4: VETERINARIAS
         BottomNavigationBarItem(
           icon: Icon(Icons.local_hospital_outlined),
@@ -77,7 +83,7 @@ class PetCareBottomNavBar extends StatelessWidget {
           label: 'Veterinarias',
           tooltip: 'Buscar Veterinarias Cercanas',
         ),
-        
+
         // TAB 5: CONSULTA EXPRESS
         BottomNavigationBarItem(
           icon: Icon(Icons.chat_outlined),
@@ -102,7 +108,7 @@ class MainNavigator extends StatefulWidget {
 class _MainNavigatorState extends State<MainNavigator> {
   /// Índice del tab actualmente activo
   int _currentTabIndex = AppRoutes.tabHome;
-  
+
   /// GlobalKeys para preservar el estado de cada Navigator de tab
   final List<GlobalKey<NavigatorState>> _navigatorKeys = [
     GlobalKey<NavigatorState>(), // Tab Inicio
@@ -129,13 +135,13 @@ class _MainNavigatorState extends State<MainNavigator> {
   /// Manejar el botón "atrás" del sistema
   bool _onWillPop() {
     final currentNavigator = _navigatorKeys[_currentTabIndex].currentState;
-    
+
     // Si el tab actual tiene pantallas en el stack, hacer pop
     if (currentNavigator != null && currentNavigator.canPop()) {
       currentNavigator.pop();
       return false; // No salir de la app
     }
-    
+
     // Si estamos en la raíz de cualquier tab que no sea Inicio, ir a Inicio
     if (_currentTabIndex != AppRoutes.tabHome) {
       setState(() {
@@ -143,7 +149,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       });
       return false; // No salir de la app
     }
-    
+
     // Si estamos en la raíz del tab Inicio, permitir salir de la app
     return true;
   }
@@ -154,7 +160,7 @@ class _MainNavigatorState extends State<MainNavigator> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        
+
         final shouldPop = _onWillPop();
         if (shouldPop) {
           Navigator.of(context).pop();
@@ -169,25 +175,25 @@ class _MainNavigatorState extends State<MainNavigator> {
               navigatorKey: _navigatorKeys[AppRoutes.tabHome],
               initialRoute: AppRoutes.home,
             ),
-            
+
             // TAB 2: PLAN
             _buildTabNavigator(
               navigatorKey: _navigatorKeys[AppRoutes.tabPlan],
               initialRoute: AppRoutes.planTemplates,
             ),
-            
+
             // TAB 3: RECORDATORIOS
             _buildTabNavigator(
               navigatorKey: _navigatorKeys[AppRoutes.tabReminders],
               initialRoute: AppRoutes.reminders,
             ),
-            
+
             // TAB 4: VETERINARIAS
             _buildTabNavigator(
               navigatorKey: _navigatorKeys[AppRoutes.tabVets],
               initialRoute: AppRoutes.vets,
             ),
-            
+
             // TAB 5: CONSULTA
             _buildTabNavigator(
               navigatorKey: _navigatorKeys[AppRoutes.tabConsult],
@@ -216,9 +222,8 @@ class _MainNavigatorState extends State<MainNavigator> {
         // Mapear rutas a pantallas reales
         return MaterialPageRoute(
           settings: settings,
-          builder: (context) => _buildScreen(
-            route: settings.name ?? initialRoute,
-          ),
+          builder:
+              (context) => _buildScreen(route: settings.name ?? initialRoute),
         );
       },
     );
@@ -230,7 +235,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     String title = 'PetCare';
     IconData icon = Icons.pets;
     String subtitle = 'Pantalla en construcción';
-    
+
     if (route.startsWith('/home') || route.startsWith('/pet')) {
       title = 'Inicio';
       subtitle = 'Dashboard y Mascotas';
@@ -254,9 +259,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-      ),
+      appBar: AppBar(title: Text(title)),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -298,36 +301,32 @@ class _MainNavigatorState extends State<MainNavigator> {
   /// Construir la pantalla correspondiente a la ruta
   Widget _buildScreen({required String route}) {
     // Tab Inicio: HomeScreen como pantalla principal
-    if (route == AppRoutes.home || 
-        route.startsWith('/home') || 
+    if (route == AppRoutes.home ||
+        route.startsWith('/home') ||
         route.startsWith('/pet')) {
       return const HomeScreen();
     }
-    
+
     // Tab Plan: PlanTemplateListScreen como pantalla principal
-    if (route == AppRoutes.planTemplates || 
-        route.startsWith('/plan')) {
+    if (route == AppRoutes.planTemplates || route.startsWith('/plan')) {
       return const PlanTemplateListScreen();
     }
-    
+
     // Tab Recordatorios: ReminderListScreen como pantalla principal
-    if (route == AppRoutes.reminders || 
-        route.startsWith('/reminders')) {
+    if (route == AppRoutes.reminders || route.startsWith('/reminders')) {
       return const ReminderListScreen();
     }
-    
+
     // Tab Veterinarias: VetMapScreen como pantalla principal
-    if (route == AppRoutes.vets || 
-        route.startsWith('/vets')) {
+    if (route == AppRoutes.vets || route.startsWith('/vets')) {
       return const VetMapScreen();
     }
-    
+
     // Tab Consulta: ChatHomeScreen como pantalla principal
-    if (route == AppRoutes.consult || 
-        route.startsWith('/consult')) {
+    if (route == AppRoutes.consult || route.startsWith('/consult')) {
       return const ChatHomeScreen();
     }
-    
+
     // Ruta no encontrada - mostrar _buildPlaceholderScreen
     return _buildPlaceholderScreen(route: route);
   }

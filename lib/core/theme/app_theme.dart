@@ -45,7 +45,6 @@ class AppTheme {
       // ========================================
       textTheme: AppTypography.textTheme,
       fontFamily: 'Roboto', // Por defecto en Android, SF Pro en iOS
-
       // ========================================
       // APP BAR
       // ========================================
@@ -74,7 +73,10 @@ class AppTheme {
             horizontal: AppSpacing.lg,
             vertical: AppSpacing.md,
           ),
-          minimumSize: const Size(AppSpacing.minTouchTarget, AppSpacing.minTouchTarget),
+          minimumSize: const Size(
+            AppSpacing.minTouchTarget,
+            AppSpacing.minTouchTarget,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
@@ -92,7 +94,10 @@ class AppTheme {
             horizontal: AppSpacing.md,
             vertical: AppSpacing.sm,
           ),
-          minimumSize: const Size(AppSpacing.minTouchTarget, AppSpacing.minTouchTarget),
+          minimumSize: const Size(
+            AppSpacing.minTouchTarget,
+            AppSpacing.minTouchTarget,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
@@ -111,7 +116,10 @@ class AppTheme {
             horizontal: AppSpacing.lg,
             vertical: AppSpacing.md,
           ),
-          minimumSize: const Size(AppSpacing.minTouchTarget, AppSpacing.minTouchTarget),
+          minimumSize: const Size(
+            AppSpacing.minTouchTarget,
+            AppSpacing.minTouchTarget,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
@@ -129,42 +137,44 @@ class AppTheme {
           horizontal: AppSpacing.md,
           vertical: AppSpacing.md,
         ),
-        
+
         // Borde normal
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: const BorderSide(color: AppColors.divider, width: 1),
         ),
-        
+
         // Borde cuando está habilitado pero sin foco
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: const BorderSide(color: AppColors.divider, width: 1),
         ),
-        
+
         // Borde cuando tiene foco
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
-        
+
         // Borde de error
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: const BorderSide(color: AppColors.error, width: 1),
         ),
-        
+
         // Borde de error con foco
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: const BorderSide(color: AppColors.error, width: 2),
         ),
-        
+
         // Estilos de texto
-        labelStyle: AppTypography.label.copyWith(color: AppColors.textSecondary),
+        labelStyle: AppTypography.label.copyWith(
+          color: AppColors.textSecondary,
+        ),
         hintStyle: AppTypography.body.copyWith(color: AppColors.textDisabled),
         errorStyle: AppTypography.caption.copyWith(color: AppColors.error),
-        
+
         // Íconos
         prefixIconColor: AppColors.textSecondary,
         suffixIconColor: AppColors.textSecondary,
@@ -173,7 +183,7 @@ class AppTheme {
       // ========================================
       // CARDS
       // ========================================
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surface,
         elevation: 2,
         shadowColor: Colors.black12,
@@ -198,10 +208,7 @@ class AppTheme {
       // ========================================
       // ICONOS
       // ========================================
-      iconTheme: const IconThemeData(
-        color: AppColors.textSecondary,
-        size: 24,
-      ),
+      iconTheme: const IconThemeData(color: AppColors.textSecondary, size: 24),
 
       // ========================================
       // BOTTOM NAVIGATION BAR

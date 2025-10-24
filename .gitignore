@@ -44,6 +44,43 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Build artifacts
+**/build/
+**/.dart_tool/
+**/.gradle/
+**/.idea/
+**/*.iml
+**/*.ipr
+**/*.iws
+
+# Android cache
+android/.gradle/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/.externalNativeBuild
+android/.cxx/
+android/**/build/
+
+# iOS cache
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
+
+# macOS
+macos/Pods/
+macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Pub cache
+.packages
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+
 # Archivos de documentación de progreso (no subir)
 FASE3_Y_4_COMPLETADAS.md
 SECCION_C_COMPLETADA.md

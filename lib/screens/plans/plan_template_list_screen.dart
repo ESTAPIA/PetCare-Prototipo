@@ -2,186 +2,255 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../data/mock_plan_templates.dart';
+import '../../models/plan_template.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import 'plan_template_detail_screen.dart';
 
-/// SCR-PLAN-TMPL: Seleccionar plantilla de plan
+/// SCR-PLAN-TEMPLATE-LIST: Catálogo de plantillas
 /// PROC-002: Plan de Cuidado Rápido
-/// 
-/// Objetivo: Mostrar plantillas predefinidas para crear plan de cuidado
-class PlanTemplateListScreen extends StatelessWidget {
+class PlanTemplateListScreen extends StatefulWidget {
   const PlanTemplateListScreen({super.key});
+
+  @override
+  State<PlanTemplateListScreen> createState() => _PlanTemplateListScreenState();
+}
+
+class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
+  String? _selectedSpecies = 'Perro'; // Mock: mascota activa es perro
+  bool _isLoading = true;
+  List<PlanTemplate> _templates = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTemplates();
+  }
+
+  Future<void> _loadTemplates() async {
+    setState(() => _isLoading = true);
+
+    // Simular carga de datos
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    setState(() {
+      _templates = MockPlanTemplatesRepository.getTemplates(
+        species: _selectedSpecies,
+      );
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Plan de Cuidado'),
+        title: const Text('Plan de cuidado rápido'),
         automaticallyImplyLeading: false,
       ),
       body: Column(
         children: [
-          // Header con instrucción
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            color: AppColors.surfaceVariant,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Elige una plantilla',
-                  style: AppTypography.h2,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Selecciona un plan según la especie de tu mascota',
-                  style: AppTypography.body.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
+          // Chip selector de mascota
+          _buildPetSelector(),
+
           // Lista de plantillas
           Expanded(
-            child: _buildTemplatesList(),
+            child:
+                _isLoading
+                    ? _buildLoadingState()
+                    : _templates.isEmpty
+                    ? _buildEmptyState()
+                    : _buildTemplateList(),
           ),
         ],
       ),
     );
   }
 
-  /// Construir lista de plantillas
-  Widget _buildTemplatesList() {
-    // TODO: Conectar con datos mock
-    final hasTemplates = true; // Cambiar según datos
-    
-    if (!hasTemplates) {
-      return const EmptyState(
-        icon: Icons.calendar_today_outlined,
-        message: 'No hay plantillas disponibles',
-        instruction: 'Crea recordatorios personalizados desde la sección Recordatorios',
-        actionLabel: 'Ir a Recordatorios',
-        // onAction: () => cambiar a tab Recordatorios,
-      );
-    }
-    
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-      children: [
-        _buildTemplateCard(
-          title: 'Plan Cachorro - Perro',
-          description: 'Vacunas, desparasitación y controles para cachorros',
-          tasks: 12,
-          duration: '6 meses',
-          icon: Icons.pets,
-          color: AppColors.primary,
-        ),
-        _buildTemplateCard(
-          title: 'Plan Adulto - Perro',
-          description: 'Mantenimiento anual para perros adultos',
-          tasks: 8,
-          duration: '12 meses',
-          icon: Icons.pets,
-          color: AppColors.secondary,
-        ),
-        _buildTemplateCard(
-          title: 'Plan Cachorro - Gato',
-          description: 'Vacunas y cuidados esenciales para gatitos',
-          tasks: 10,
-          duration: '6 meses',
-          icon: Icons.pets,
-          color: AppColors.primary,
-        ),
-        _buildTemplateCard(
-          title: 'Plan Adulto - Gato',
-          description: 'Controles y vacunas para gatos adultos',
-          tasks: 6,
-          duration: '12 meses',
-          icon: Icons.pets,
-          color: AppColors.secondary,
-        ),
-      ],
+  /// Selector de mascota activa (chip)
+  Widget _buildPetSelector() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          const Text('Filtrar por: ', style: TextStyle(fontSize: 14)),
+          const SizedBox(width: AppSpacing.sm),
+          ChoiceChip(
+            label: const Text('Luna (Perro)'),
+            avatar: const CircleAvatar(
+              backgroundColor: Colors.transparent,
+              child: Icon(Icons.pets, size: 16),
+            ),
+            selected: _selectedSpecies == 'Perro',
+            onSelected: (selected) {
+              if (selected) {
+                setState(() => _selectedSpecies = 'Perro');
+                _loadTemplates();
+              }
+            },
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          ChoiceChip(
+            label: const Text('Max (Gato)'),
+            avatar: const CircleAvatar(
+              backgroundColor: Colors.transparent,
+              child: Icon(Icons.pets, size: 16),
+            ),
+            selected: _selectedSpecies == 'Gato',
+            onSelected: (selected) {
+              if (selected) {
+                setState(() => _selectedSpecies = 'Gato');
+                _loadTemplates();
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Lista de plantillas
+  Widget _buildTemplateList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      itemCount: _templates.length,
+      itemBuilder: (context, index) {
+        final template = _templates[index];
+        return _buildTemplateCard(template);
+      },
     );
   }
 
   /// Card de plantilla individual
-  Widget _buildTemplateCard({
-    required String title,
-    required String description,
-    required int tasks,
-    required String duration,
-    required IconData icon,
-    required Color color,
-  }) {
+  Widget _buildTemplateCard(PlanTemplate template) {
     return AppCard(
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
       onTap: () {
-        // TODO: Navegar a detalle de plantilla
-      },
-      child: Row(
-        children: [
-          // Ícono
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            ),
-            child: Icon(icon, color: color, size: 32),
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlanTemplateDetailScreen(template: template),
           ),
-          
-          const SizedBox(width: AppSpacing.md),
-          
-          // Información
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: AppTypography.bodyBold),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+        );
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Ícono según tipo
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
+                child: Icon(
+                  _getTemplateIcon(template.id),
+                  color: AppColors.primary,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.task_alt, size: 16, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
+                    Text(template.name, style: AppTypography.bodyBold),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
-                      '$tasks tareas',
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Icon(Icons.schedule, size: 16, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text(
-                      duration,
+                      '${template.tasks.length} tareas',
                       style: AppTypography.caption.copyWith(
                         color: AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
           ),
-          
-          // Flecha
-          Icon(
-            Icons.chevron_right,
-            color: AppColors.textDisabled,
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            template.description,
+            style: AppTypography.body.copyWith(color: AppColors.textSecondary),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.xs,
+            children:
+                template.species.map((species) {
+                  return Chip(
+                    label: Text(species, style: const TextStyle(fontSize: 12)),
+                    backgroundColor: AppColors.surfaceVariant,
+                    padding: EdgeInsets.zero,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  );
+                }).toList(),
           ),
         ],
+      ),
+    );
+  }
+
+  IconData _getTemplateIcon(String templateId) {
+    switch (templateId) {
+      case 'plan-tmpl-001':
+        return Icons.vaccines;
+      case 'plan-tmpl-002':
+        return Icons.medication;
+      case 'plan-tmpl-003':
+        return Icons.favorite;
+      case 'plan-tmpl-004':
+        return Icons.local_hospital;
+      default:
+        return Icons.calendar_today;
+    }
+  }
+
+  /// Estado de carga (skeleton)
+  Widget _buildLoadingState() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        return AppCard(
+          margin: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(height: 60, color: AppColors.surfaceVariant),
+              const SizedBox(height: AppSpacing.sm),
+              Container(
+                height: 14,
+                width: double.infinity,
+                color: AppColors.surfaceVariant,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Container(
+                height: 14,
+                width: 150,
+                color: AppColors.surfaceVariant,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Estado vacío
+  Widget _buildEmptyState() {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: EmptyState(
+        icon: Icons.calendar_today,
+        message: 'No hay plantillas disponibles',
+        instruction:
+            'No se encontraron plantillas para ${_selectedSpecies ?? "esta mascota"}. Prueba con otra mascota o crea recordatorios personalizados.',
       ),
     );
   }

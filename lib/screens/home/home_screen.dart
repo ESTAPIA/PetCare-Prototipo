@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../data/mock_reminders.dart';
+import '../../models/reminder.dart';
 
 /// SCR-HOME-DASH: Dashboard principal
 /// PROC-001: Gestión de Mascotas
-/// 
+///
 /// Objetivo: Mostrar acceso rápido a mascotas, próximo recordatorio y acciones frecuentes
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Obtener próximo recordatorio
+    final nextReminder = MockRemindersRepository.getNextReminder();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Inicio'),
@@ -24,23 +30,23 @@ class HomeScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: AppSpacing.md),
-            
+
             // SECCIÓN 1: MIS MASCOTAS
             _buildSectionHeader('Mis Mascotas'),
             _buildPetsSection(),
-            
+
             const SizedBox(height: AppSpacing.lg),
-            
+
             // SECCIÓN 2: PRÓXIMO RECORDATORIO
             _buildSectionHeader('Próximo recordatorio'),
-            _buildNextReminderSection(),
-            
+            _buildNextReminderSection(nextReminder),
+
             const SizedBox(height: AppSpacing.lg),
-            
+
             // SECCIÓN 3: ACCESOS RÁPIDOS
             _buildSectionHeader('Accesos rápidos'),
             _buildQuickActionsSection(),
-            
+
             const SizedBox(height: AppSpacing.xl),
           ],
         ),
@@ -52,10 +58,7 @@ class HomeScreen extends StatelessWidget {
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: Text(
-        title,
-        style: AppTypography.h2,
-      ),
+      child: Text(title, style: AppTypography.h2),
     );
   }
 
@@ -63,7 +66,7 @@ class HomeScreen extends StatelessWidget {
   Widget _buildPetsSection() {
     // TODO: Conectar con datos mock
     final hasPets = false; // Cambiar a true cuando haya datos
-    
+
     if (!hasPets) {
       return const Padding(
         padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -76,7 +79,7 @@ class HomeScreen extends StatelessWidget {
         ),
       );
     }
-    
+
     return SizedBox(
       height: 120,
       child: ListView(
@@ -145,17 +148,11 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.add_circle_outline,
-              size: 48,
-              color: AppColors.primary,
-            ),
+            Icon(Icons.add_circle_outline, size: 48, color: AppColors.primary),
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Agregar',
-              style: AppTypography.label.copyWith(
-                color: AppColors.primary,
-              ),
+              style: AppTypography.label.copyWith(color: AppColors.primary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -164,12 +161,9 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  /// Construir sección de próximo recordatorio
-  Widget _buildNextReminderSection() {
-    // TODO: Conectar con datos mock
-    final hasReminder = false; // Cambiar a true cuando haya datos
-    
-    if (!hasReminder) {
+  /// Construir sección de próximo recordatorio con datos reales
+  Widget _buildNextReminderSection(Reminder? reminder) {
+    if (reminder == null) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         child: AppCard(
@@ -194,61 +188,80 @@ class HomeScreen extends StatelessWidget {
         ),
       );
     }
-    
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.vaccines, color: AppColors.warning),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'Vacuna Rabia - Luna',
-                  style: AppTypography.bodyBold,
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(reminder.type.emoji, style: const TextStyle(fontSize: 32)),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    '${reminder.title} - Luna', // Mock pet name
+                    style: AppTypography.bodyBold,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            'Hoy, 10:00 AM',
-            style: AppTypography.caption.copyWith(
-              color: AppColors.textSecondary,
+              ],
             ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.check),
-                  label: const Text('Hecho'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.success,
-                    side: BorderSide(color: AppColors.success),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              '${_formatDate(reminder.date)}, ${reminder.time}',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.check),
+                    label: const Text('Hecho'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.success,
+                      side: BorderSide(color: AppColors.success),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.schedule),
-                  label: const Text('Posponer'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.warning,
-                    side: BorderSide(color: AppColors.warning),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.schedule),
+                    label: const Text('Posponer'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.warning,
+                      side: BorderSide(color: AppColors.warning),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  String _formatDate(String dateStr) {
+    final date = DateTime.parse(dateStr);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final dateOnly = DateTime(date.year, date.month, date.day);
+
+    if (dateOnly == today) {
+      return 'Hoy';
+    } else if (dateOnly == tomorrow) {
+      return 'Mañana';
+    } else {
+      return DateFormat('EEEE d MMM', 'es').format(date);
+    }
   }
 
   /// Construir sección de accesos rápidos

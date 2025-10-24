@@ -1,16 +1,46 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../data/mock_reminders.dart';
+import '../../models/reminder.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import 'reminder_new_screen.dart';
+import 'reminder_calendar_screen.dart';
 
-/// SCR-REM-LIST: Lista de recordatorios
+/// SCR-REM-LIST: Lista de recordatorios agrupados
 /// PROC-003: Recordatorios
-/// 
-/// Objetivo: Mostrar agenda de recordatorios pendientes con acciones rápidas
-class ReminderListScreen extends StatelessWidget {
+class ReminderListScreen extends StatefulWidget {
   const ReminderListScreen({super.key});
+
+  @override
+  State<ReminderListScreen> createState() => _ReminderListScreenState();
+}
+
+class _ReminderListScreenState extends State<ReminderListScreen> {
+  String _selectedFilter = 'Todos';
+  bool _isLoading = true;
+  List<Reminder> _reminders = [];
+  final Set<String> _processingIds = {}; // IDs en proceso
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReminders();
+  }
+
+  Future<void> _loadReminders() async {
+    setState(() => _isLoading = true);
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    setState(() {
+      _reminders = MockRemindersRepository.getAllReminders();
+      _isLoading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,267 +51,623 @@ class ReminderListScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.calendar_month),
-            onPressed: () {
-              // TODO: Navegar a vista calendario
-            },
             tooltip: 'Vista calendario',
-          ),
-          IconButton(
-            icon: const Icon(Icons.filter_list),
-            onPressed: () {
-              // TODO: Mostrar filtros
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ReminderCalendarScreen(),
+                ),
+              );
+              _loadReminders(); // Recargar al volver
             },
-            tooltip: 'Filtros',
           ),
         ],
       ),
       body: Column(
         children: [
-          // Filtros rápidos (chips)
-          _buildQuickFilters(),
-          
-          // Lista de recordatorios
+          _buildFilters(),
           Expanded(
-            child: _buildRemindersList(),
+            child: _isLoading ? _buildLoadingState() : _buildRemindersList(),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Navegar a crear recordatorio
+        onPressed: () async {
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(builder: (context) => const ReminderNewScreen()),
+          );
+
+          if (result == true && mounted) {
+            _loadReminders(); // Recargar lista tras crear
+          }
         },
+        tooltip: 'Crear recordatorio',
         child: const Icon(Icons.add),
-        tooltip: 'Agregar recordatorio',
       ),
     );
   }
 
-  /// Construir filtros rápidos
-  Widget _buildQuickFilters() {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.sm,
+  Widget _buildFilters() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          _buildFilterChip('Todos'),
+          const SizedBox(width: AppSpacing.sm),
+          _buildFilterChip('Hoy'),
+          const SizedBox(width: AppSpacing.sm),
+          _buildFilterChip('Esta semana'),
+          const SizedBox(width: AppSpacing.sm),
+          _buildFilterChip('Vencidos'),
+        ],
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+    );
+  }
+
+  Widget _buildFilterChip(String label) {
+    final isSelected = _selectedFilter == label;
+    final count = _getFilterCount(label);
+
+    return ChoiceChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label),
+          if (count > 0 && label == 'Vencidos') ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.error,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                count.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected && _selectedFilter != label) {
+          setState(() {
+            _selectedFilter = label;
+          });
+        }
+      },
+    );
+  }
+
+  int _getFilterCount(String filter) {
+    if (filter != 'Vencidos') return 0;
+    return _reminders.where((r) => r.isOverdue).length;
+  }
+
+  Widget _buildRemindersList() {
+    final filteredReminders = _getFilteredReminders();
+
+    if (filteredReminders.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: EmptyState(
+          icon: Icons.calendar_today,
+          message: 'No hay recordatorios',
+          instruction: 'Crea el primero para no olvidar tareas.',
+        ),
+      );
+    }
+
+    final grouped = _groupByDate(filteredReminders);
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      itemCount: grouped.length,
+      itemBuilder: (context, index) {
+        final entry = grouped.entries.elementAt(index);
+        return _buildGroup(entry.key, entry.value);
+      },
+    );
+  }
+
+  Widget _buildGroup(String dateLabel, List<Reminder> reminders) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          child: Text(dateLabel, style: AppTypography.h2),
+        ),
+        ...reminders.map((r) => _buildReminderItem(r)),
+        const SizedBox(height: AppSpacing.md),
+      ],
+    );
+  }
+
+  Widget _buildReminderItem(Reminder reminder) {
+    final isDone = reminder.status == ReminderStatus.done;
+    final isProcessing = _processingIds.contains(reminder.id);
+
+    return Opacity(
+      opacity: isDone ? 0.5 : (isProcessing ? 0.7 : 1.0),
+      child: AppCard(
+        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
         child: Row(
           children: [
-            FilterChip(
-              label: const Text('Todos'),
-              selected: true,
-              onSelected: (selected) {},
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: _getTypeColor(reminder.type).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+              ),
+              child: Text(
+                reminder.type.emoji,
+                style: const TextStyle(fontSize: 24),
+              ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            FilterChip(
-              label: const Text('Hoy'),
-              selected: false,
-              onSelected: (selected) {},
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            FilterChip(
-              label: const Text('Esta semana'),
-              selected: false,
-              onSelected: (selected) {},
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            FilterChip(
-              label: Row(
-                mainAxisSize: MainAxisSize.min,
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Vencidos'),
-                  const SizedBox(width: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AppColors.error,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '2',
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.onPrimary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          reminder.title,
+                          style:
+                              isDone
+                                  ? AppTypography.bodyBold.copyWith(
+                                    decoration: TextDecoration.lineThrough,
+                                  )
+                                  : AppTypography.bodyBold,
+                        ),
                       ),
+                      if (reminder.isOverdue && !isDone)
+                        _buildBadge('Vencido', AppColors.error),
+                      if (reminder.isDueSoon && !isDone)
+                        _buildBadge('Pronto', AppColors.warning),
+                      if (isDone)
+                        Icon(
+                          Icons.check_circle,
+                          color: AppColors.success,
+                          size: 20,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    '${reminder.time} • Luna',
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
               ),
-              selected: false,
-              onSelected: (selected) {},
             ),
+            if (!isDone && !isProcessing) ...[
+              const SizedBox(width: AppSpacing.sm),
+              IconButton(
+                icon: Icon(Icons.check, color: AppColors.success),
+                tooltip: 'Marcar como hecho',
+                onPressed: () => _markAsDone(reminder),
+              ),
+              IconButton(
+                icon: Icon(Icons.schedule, color: AppColors.warning),
+                tooltip: 'Posponer',
+                onPressed: () => _snooze(reminder),
+              ),
+            ],
+            if (isProcessing)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  /// Construir lista de recordatorios
-  Widget _buildRemindersList() {
-    // TODO: Conectar con datos mock
-    final hasReminders = true; // Cambiar según datos
-    
-    if (!hasReminders) {
-      return const EmptyState(
-        icon: Icons.notifications_outlined,
-        message: 'No tienes recordatorios',
-        instruction: 'Crea un plan de cuidado o agrega recordatorios personalizados',
-        actionLabel: 'Crear recordatorio',
-        // onAction: () => navegar a crear,
-      );
-    }
-    
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      children: [
-        // Grupo: Hoy
-        _buildGroupHeader('Hoy'),
-        _buildReminderCard(
-          title: 'Vacuna Rabia - Luna',
-          time: '10:00 AM',
-          petName: 'Luna',
-          icon: Icons.vaccines,
-          iconColor: AppColors.warning,
-          isOverdue: false,
-        ),
-        _buildReminderCard(
-          title: 'Desparasitación - Max',
-          time: '3:00 PM',
-          petName: 'Max',
-          icon: Icons.medication,
-          iconColor: AppColors.info,
-          isOverdue: false,
-        ),
-        
-        const SizedBox(height: AppSpacing.md),
-        
-        // Grupo: Mañana
-        _buildGroupHeader('Mañana'),
-        _buildReminderCard(
-          title: 'Control veterinario - Luna',
-          time: '9:00 AM',
-          petName: 'Luna',
-          icon: Icons.local_hospital,
-          iconColor: AppColors.secondary,
-          isOverdue: false,
-        ),
-        
-        const SizedBox(height: AppSpacing.md),
-        
-        // Grupo: Próximos 7 días
-        _buildGroupHeader('Próximos 7 días'),
-        _buildReminderCard(
-          title: 'Corte de uñas - Max',
-          time: 'Vie 15, 2:00 PM',
-          petName: 'Max',
-          icon: Icons.cut,
-          iconColor: AppColors.primary,
-          isOverdue: false,
-        ),
-      ],
-    );
-  }
-
-  /// Header de grupo de fechas
-  Widget _buildGroupHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.sm,
+  Widget _buildBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        title,
-        style: AppTypography.bodyBold.copyWith(
-          color: AppColors.textSecondary,
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
 
-  /// Card de recordatorio individual
-  Widget _buildReminderCard({
-    required String title,
-    required String time,
-    required String petName,
-    required IconData icon,
-    required Color iconColor,
-    required bool isOverdue,
-  }) {
-    return AppCard(
-      onTap: () {
-        // TODO: Navegar a detalle de recordatorio
-      },
-      child: Row(
-        children: [
-          // Ícono
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            ),
-            child: Icon(icon, color: iconColor, size: 24),
+  Color _getTypeColor(ReminderType type) {
+    switch (type) {
+      case ReminderType.vaccine:
+        return AppColors.primary;
+      case ReminderType.medication:
+        return AppColors.secondary;
+      case ReminderType.appointment:
+        return AppColors.warning;
+      case ReminderType.grooming:
+        return AppColors.success;
+      case ReminderType.other:
+        return AppColors.textSecondary;
+    }
+  }
+
+  Future<void> _markAsDone(Reminder reminder) async {
+    // Prevenir múltiples clics
+    if (_processingIds.contains(reminder.id)) {
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false, // No cerrar tocando fuera
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Confirmar'),
+            content: Text('¿Completar "${reminder.title}"?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                ),
+                child: const Text('Sí, hecho'),
+              ),
+            ],
           ),
-          
-          const SizedBox(width: AppSpacing.md),
-          
-          // Información
-          Expanded(
+    );
+
+    if (confirm != true || !mounted) return;
+
+    // Marcar como en proceso
+    setState(() {
+      _processingIds.add(reminder.id);
+    });
+
+    try {
+      final success = await MockRemindersRepository.markAsDone(reminder.id);
+
+      if (!mounted) return;
+
+      if (success) {
+        // Recargar lista
+        await _loadReminders();
+
+        // Limpiar de procesamiento
+        setState(() {
+          _processingIds.remove(reminder.id);
+        });
+
+        // Mostrar confirmación
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✓ "${reminder.title}" completado'),
+              backgroundColor: AppColors.success,
+              action: SnackBarAction(
+                label: 'Deshacer',
+                textColor: Colors.white,
+                onPressed: () => _undoMarkAsDone(reminder.id),
+              ),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Error al marcar como hecho');
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      // Limpiar de procesamiento
+      setState(() {
+        _processingIds.remove(reminder.id);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+      );
+    }
+  }
+
+  Future<void> _undoMarkAsDone(String reminderId) async {
+    // Prevenir múltiples clics
+    if (_processingIds.contains(reminderId)) {
+      return;
+    }
+
+    setState(() {
+      _processingIds.add(reminderId);
+    });
+
+    try {
+      final reminder = MockRemindersRepository.getReminderById(reminderId);
+      if (reminder != null) {
+        await MockRemindersRepository.updateReminder(
+          reminderId,
+          reminder.copyWith(
+            status: ReminderStatus.pending,
+            clearCompletedAt: true,
+          ),
+        );
+
+        if (!mounted) return;
+
+        await _loadReminders();
+
+        setState(() {
+          _processingIds.remove(reminderId);
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Recordatorio restaurado'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _processingIds.remove(reminderId);
+      });
+    }
+  }
+
+  Future<void> _snooze(Reminder reminder) async {
+    // Prevenir múltiples clics
+    if (_processingIds.contains(reminder.id)) {
+      return;
+    }
+
+    final selectedMinutes = await showModalBottomSheet<int>(
+      context: context,
+      isDismissible: true,
+      builder:
+          (context) => Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: AppTypography.bodyBold),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(Icons.schedule, size: 14, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text(
-                      time,
-                      style: AppTypography.caption.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Chip(
-                      label: Text(petName),
-                      labelStyle: AppTypography.caption,
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
+                Text('Posponer recordatorio', style: AppTypography.h2),
+                const SizedBox(height: AppSpacing.md),
+                ListTile(
+                  leading: Icon(Icons.schedule, color: AppColors.warning),
+                  title: const Text('10 minutos'),
+                  onTap: () => Navigator.pop(context, 10),
+                ),
+                ListTile(
+                  leading: Icon(Icons.schedule, color: AppColors.warning),
+                  title: const Text('30 minutos'),
+                  onTap: () => Navigator.pop(context, 30),
+                ),
+                ListTile(
+                  leading: Icon(Icons.schedule, color: AppColors.warning),
+                  title: const Text('1 hora'),
+                  onTap: () => Navigator.pop(context, 60),
+                ),
+                ListTile(
+                  leading: Icon(Icons.schedule, color: AppColors.warning),
+                  title: const Text('3 horas'),
+                  onTap: () => Navigator.pop(context, 180),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
                 ),
               ],
             ),
           ),
-          
-          // Botones de acción
-          Column(
-            children: [
-              IconButton(
-                icon: Icon(Icons.check_circle_outline, color: AppColors.success),
-                onPressed: () {
-                  // TODO: Marcar como hecho
-                },
-                tooltip: 'Hecho',
-                constraints: const BoxConstraints(),
-                padding: const EdgeInsets.all(AppSpacing.xs),
-              ),
-              IconButton(
-                icon: Icon(Icons.schedule, color: AppColors.warning),
-                onPressed: () {
-                  // TODO: Posponer
-                },
-                tooltip: 'Posponer',
-                constraints: const BoxConstraints(),
-                padding: const EdgeInsets.all(AppSpacing.xs),
-              ),
-            ],
+    );
+
+    if (selectedMinutes == null || !mounted) return;
+
+    // Marcar como en proceso
+    setState(() {
+      _processingIds.add(reminder.id);
+    });
+
+    try {
+      final newTime = DateTime.now().add(Duration(minutes: selectedMinutes));
+      await MockRemindersRepository.snoozeReminder(reminder.id, newTime);
+
+      if (!mounted) return;
+
+      await _loadReminders();
+
+      setState(() {
+        _processingIds.remove(reminder.id);
+      });
+
+      if (mounted) {
+        final formattedTime = DateFormat('HH:mm').format(newTime);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⏰ Reprogramado para $formattedTime'),
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 3),
           ),
-        ],
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _processingIds.remove(reminder.id);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al posponer: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  void _createReminder() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Crear recordatorio próximamente'),
+        action: SnackBarAction(label: 'OK', onPressed: () {}),
       ),
+    );
+  }
+
+  List<Reminder> _getFilteredReminders() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    switch (_selectedFilter) {
+      case 'Hoy':
+        return _reminders.where((r) {
+          final reminderDate = DateTime.parse(r.date);
+          final reminderDay = DateTime(
+            reminderDate.year,
+            reminderDate.month,
+            reminderDate.day,
+          );
+          return reminderDay == today;
+        }).toList();
+
+      case 'Esta semana':
+        final weekEnd = today.add(const Duration(days: 7));
+        return _reminders.where((r) {
+          final reminderDate = DateTime.parse(r.date);
+          final reminderDay = DateTime(
+            reminderDate.year,
+            reminderDate.month,
+            reminderDate.day,
+          );
+          return (reminderDay.isAfter(today) || reminderDay == today) &&
+              reminderDay.isBefore(weekEnd);
+        }).toList();
+
+      case 'Vencidos':
+        return _reminders.where((r) => r.isOverdue).toList();
+
+      default: // Todos
+        return _reminders;
+    }
+  }
+
+  Map<String, List<Reminder>> _groupByDate(List<Reminder> reminders) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final grouped = <String, List<Reminder>>{};
+
+    for (final reminder in reminders) {
+      final reminderDate = DateTime.parse(reminder.date);
+      final normalizedDate = DateTime(
+        reminderDate.year,
+        reminderDate.month,
+        reminderDate.day,
+      );
+
+      String label;
+      if (normalizedDate == today) {
+        label = 'Hoy';
+      } else if (normalizedDate == tomorrow) {
+        label = 'Mañana';
+      } else {
+        label = DateFormat('EEEE d MMM', 'es').format(reminderDate);
+      }
+
+      grouped.putIfAbsent(label, () => []);
+      grouped[label]!.add(reminder);
+    }
+
+    return grouped;
+  }
+
+  Widget _buildLoadingState() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      itemCount: 3,
+      itemBuilder: (context, index) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 20,
+              width: 100,
+              color: AppColors.surfaceVariant,
+              margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            ),
+            ...List.generate(
+              2,
+              (_) => AppCard(
+                margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      color: AppColors.surfaceVariant,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 16,
+                            width: double.infinity,
+                            color: AppColors.surfaceVariant,
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Container(
+                            height: 12,
+                            width: 150,
+                            color: AppColors.surfaceVariant,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
