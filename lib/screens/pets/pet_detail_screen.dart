@@ -7,6 +7,7 @@ import '../../models/pet.dart';
 import '../../data/mock_pets.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import 'pet_edit_screen.dart';
 
 /// SCR-PET-DETAIL: Pantalla de detalle de mascota (PROC-001)
 /// 
@@ -56,36 +57,20 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
 
   /// Navegar a pantalla de edición
   /// 
-  /// PLACEHOLDER: Implementar cuando se complete PASO E
-  void _navigateToEdit() {
-    // TODO PASO E: Implementar navegación real
-    // final result = await Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (context) => PetEditScreen(pet: _pet!),
-    //     fullscreenDialog: true,
-    //   ),
-    // );
-    // if (result == true) _loadPet(); // Recargar después de editar
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.info_outline, color: Colors.white, size: 20),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                'Editar ${_pet!.nombre} (Disponible en PASO E)',
-                style: const TextStyle(fontSize: 14),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.info,
-        duration: const Duration(seconds: 3),
+  /// Abre formulario de edición y recarga datos si se guardaron cambios
+  Future<void> _navigateToEdit() async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PetEditScreen(pet: _pet!),
+        fullscreenDialog: true,
       ),
     );
+    
+    // Si se guardaron cambios, recargar datos
+    if (result == true && mounted) {
+      _loadPet();
+    }
   }
 
   /// Mostrar diálogo de confirmación para eliminar
