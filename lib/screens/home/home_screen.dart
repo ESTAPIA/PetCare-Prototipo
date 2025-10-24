@@ -4,12 +4,12 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../widgets/common/app_card.dart';
-import '../../widgets/common/empty_state.dart';
 import '../../data/mock_reminders.dart';
 import '../../models/reminder.dart';
 import '../../data/mock_pets.dart';
 import '../../models/pet.dart';
-import '../../navigation/app_routes.dart';
+import '../pets/pet_detail_screen.dart';
+import '../pets/pet_new_screen.dart';
 
 /// SCR-HOME-DASH: Dashboard principal
 /// PROC-001: Gestión de Mascotas
@@ -29,22 +29,43 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Cargar inmediatamente sin esperar
     _loadPets();
   }
 
   /// Cargar mascotas desde el repositorio
   Future<void> _loadPets() async {
+    if (!mounted) return;
+    
     setState(() => _isLoading = true);
     
-    // Nielsen H1: Visibilidad del estado con delay mínimo
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    final pets = await MockPetsRepository.getAllPets();
-    
-    setState(() {
-      _pets = pets;
-      _isLoading = false;
-    });
+    try {
+      // Nielsen H1: Visibilidad del estado con delay mínimo
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      final pets = await MockPetsRepository.getAllPets();
+      
+      if (!mounted) return;
+      
+      setState(() {
+        _pets = pets;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() {
+        _isLoading = false;
+      });
+      
+      // Mostrar error si falla
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al cargar mascotas: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -56,91 +77,220 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Inicio'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {
+              // TODO: Ver todas las notificaciones
+            },
+            tooltip: 'Notificaciones',
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: AppSpacing.md),
+      body: RefreshIndicator(
+        onRefresh: _loadPets,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // SALUDO USUARIO
+              _buildWelcomeBanner(),
 
-            // SECCIÓN 1: MIS MASCOTAS
-            _buildSectionHeader('Mis Mascotas'),
-            _buildPetsSection(),
+              const SizedBox(height: AppSpacing.lg),
 
-            const SizedBox(height: AppSpacing.lg),
+              // SECCIÓN 1: MIS MASCOTAS
+              _buildSectionHeader('Mis Mascotas', icon: Icons.pets),
+              const SizedBox(height: AppSpacing.sm),
+              _buildPetsSection(),
 
-            // SECCIÓN 2: PRÓXIMO RECORDATORIO
-            _buildSectionHeader('Próximo recordatorio'),
-            _buildNextReminderSection(nextReminder),
+              const SizedBox(height: AppSpacing.xl),
 
-            const SizedBox(height: AppSpacing.lg),
+              // SECCIÓN 2: PRÓXIMO RECORDATORIO
+              _buildSectionHeader('Próximo recordatorio', icon: Icons.alarm),
+              const SizedBox(height: AppSpacing.sm),
+              _buildNextReminderSection(nextReminder),
 
-            // SECCIÓN 3: ACCESOS RÁPIDOS
-            _buildSectionHeader('Accesos rápidos'),
-            _buildQuickActionsSection(),
+              const SizedBox(height: AppSpacing.xl),
 
-            const SizedBox(height: AppSpacing.xl),
-          ],
+              // SECCIÓN 3: ACCESOS RÁPIDOS
+              _buildSectionHeader('Acceso rápido', icon: Icons.dashboard),
+              const SizedBox(height: AppSpacing.sm),
+              _buildQuickAccessSection(),
+
+              const SizedBox(height: AppSpacing.xl),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  /// Banner de bienvenida
+  Widget _buildWelcomeBanner() {
+    final hour = DateTime.now().hour;
+    String greeting = 'Buenos días';
+    IconData greetingIcon = Icons.wb_sunny;
+    
+    if (hour >= 12 && hour < 19) {
+      greeting = 'Buenas tardes';
+      greetingIcon = Icons.wb_twilight;
+    } else if (hour >= 19 || hour < 6) {
+      greeting = 'Buenas noches';
+      greetingIcon = Icons.nightlight_round;
+    }
+
+    return Container(
+      margin: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primary,
+            AppColors.primary.withOpacity(0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(greetingIcon, color: Colors.white, size: 32),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  greeting,
+                  style: AppTypography.h2.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  '¿Cómo están tus mascotas hoy?',
+                  style: AppTypography.body.copyWith(
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   /// Construir encabezado de sección
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, {IconData? icon}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: Text(title, style: AppTypography.h2),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: AppColors.primary, size: 24),
+            const SizedBox(width: AppSpacing.sm),
+          ],
+          Text(title, style: AppTypography.h2),
+        ],
+      ),
     );
   }
 
   /// Construir sección de mascotas (horizontal scroll)
   Widget _buildPetsSection() {
-    // Nielsen H1: Mostrar loading state mientras carga
+    // Loading state
     if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.all(AppSpacing.xl),
-            child: CircularProgressIndicator(),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: SizedBox(
+          height: 140,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Cargando mascotas...',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
-    // Nielsen H10: EmptyState con instrucción clara
+    // Empty state
     if (_pets.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        child: EmptyState(
-          icon: Icons.pets,
-          message: 'Aún no tienes mascotas',
-          instruction: '¡Agrega tu primera compañera!',
-          actionLabel: 'Agregar mascota',
-          onAction: () async {
-            final result = await Navigator.pushNamed(
-              context,
-              AppRoutes.petNew,
-            );
-            if (result == true) {
-              _loadPets(); // Recargar después de crear
-            }
-          },
+        child: AppCard(
+          child: Column(
+            children: [
+              Icon(Icons.pets, size: 48, color: AppColors.primary),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Aún no tienes mascotas',
+                style: AppTypography.bodyBold,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '¡Agrega tu primera compañera para comenzar!',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              FilledButton.icon(
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const PetNewScreen(),
+                      fullscreenDialog: true,
+                    ),
+                  );
+                  if (result == true) {
+                    _loadPets();
+                  }
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Agregar mascota'),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    // Nielsen H6: Reconocimiento - mostrar pets con datos reales
+    // Lista de mascotas
     return SizedBox(
-      height: 120,
-      child: ListView(
+      height: 140,
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-        children: [
-          ..._pets.map((pet) => _buildPetCard(pet)),
-          _buildAddPetCard(),
-        ],
+        itemCount: _pets.length + 1, // +1 para el botón de agregar
+        itemBuilder: (context, index) {
+          if (index == _pets.length) {
+            return _buildAddPetCard();
+          }
+          return _buildPetCard(_pets[index]);
+        },
       ),
     );
   }
@@ -148,18 +298,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Card de mascota individual
   Widget _buildPetCard(Pet pet) {
     return Container(
-      width: 100,
-      margin: const EdgeInsets.only(right: AppSpacing.sm),
+      width: 120,
+      margin: const EdgeInsets.only(right: AppSpacing.md),
       child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.sm),
+        padding: const EdgeInsets.all(AppSpacing.md),
         onTap: () async {
-          // Nielsen H4: Consistencia - mismo patrón de navegación
-          final result = await Navigator.pushNamed(
+          // Importar la pantalla de detalle
+          final result = await Navigator.push(
             context,
-            AppRoutes.petDetail,
-            arguments: pet.id,
+            MaterialPageRoute(
+              builder: (context) => PetDetailScreen(petId: pet.id),
+            ),
           );
-          // Recargar si hubo cambios (edición o eliminación)
           if (result == true) {
             _loadPets();
           }
@@ -168,18 +318,18 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircleAvatar(
-              radius: 24,
+              radius: 30,
               backgroundColor: AppColors.primary,
               child: Text(
                 pet.inicial,
                 style: const TextStyle(
-                  fontSize: 20,
+                  fontSize: 24,
                   fontWeight: FontWeight.bold,
                   color: AppColors.onPrimary,
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               pet.nombre,
               style: AppTypography.bodyBold,
@@ -187,8 +337,9 @@ class _HomeScreenState extends State<HomeScreen> {
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: AppSpacing.xs),
             Text(
-              pet.descripcionCorta,
+              pet.especie.displayName,
               style: AppTypography.caption.copyWith(
                 color: AppColors.textSecondary,
               ),
@@ -205,28 +356,52 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Card para agregar nueva mascota
   Widget _buildAddPetCard() {
     return Container(
-      width: 100,
-      margin: const EdgeInsets.only(right: AppSpacing.sm),
+      width: 120,
+      margin: const EdgeInsets.only(right: AppSpacing.md),
       child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.sm),
+        padding: const EdgeInsets.all(AppSpacing.md),
         onTap: () async {
-          // Nielsen H3: Control y libertad - permitir crear desde dashboard
-          final result = await Navigator.pushNamed(
+          final result = await Navigator.push(
             context,
-            AppRoutes.petNew,
+            MaterialPageRoute(
+              builder: (context) => const PetNewScreen(),
+              fullscreenDialog: true,
+            ),
           );
           if (result == true) {
-            _loadPets(); // Recargar después de crear
+            _loadPets();
           }
         },
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.add_circle_outline, size: 48, color: AppColors.primary),
-            const SizedBox(height: AppSpacing.xs),
+            Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.add,
+                size: 32,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               'Agregar',
-              style: AppTypography.label.copyWith(color: AppColors.primary),
+              style: AppTypography.bodyBold.copyWith(
+                color: AppColors.primary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Nueva',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.primary,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -348,50 +523,127 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Construir sección de accesos rápidos
-  Widget _buildQuickActionsSection() {
+  /// Sección de acceso rápido
+  Widget _buildQuickAccessSection() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.sm,
+      child: Column(
         children: [
-          _buildQuickActionChip(
-            label: 'Productos y Notas',
-            icon: Icons.shopping_bag_outlined,
-            onTap: () {
-              // TODO: PROC-005 - Navegar a productos
-            },
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAccessCard(
+                  title: 'Ver todas',
+                  subtitle: 'mis mascotas',
+                  icon: Icons.pets,
+                  color: AppColors.primary,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Función próximamente'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: _buildQuickAccessCard(
+                  title: 'Recordatorios',
+                  subtitle: 'programados',
+                  icon: Icons.calendar_today,
+                  color: AppColors.info,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Usa el menú inferior'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-          _buildQuickActionChip(
-            label: 'Perfil y Ayuda',
-            icon: Icons.person_outline,
-            onTap: () {
-              // TODO: Navegar a perfil (pendiente implementación)
-            },
-          ),
-          _buildQuickActionChip(
-            label: 'Buscar veterinarias',
-            icon: Icons.local_hospital_outlined,
-            onTap: () {
-              // TODO: PROC-004 - Cambiar a tab Veterinarias
-            },
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAccessCard(
+                  title: 'Veterinarias',
+                  subtitle: 'cercanas',
+                  icon: Icons.local_hospital,
+                  color: AppColors.error,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Usa el menú inferior'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: _buildQuickAccessCard(
+                  title: 'Consulta',
+                  subtitle: 'veterinaria',
+                  icon: Icons.chat_bubble_outline,
+                  color: AppColors.success,
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Usa el menú inferior'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Chip de acción rápida
-  Widget _buildQuickActionChip({
-    required String label,
+  /// Card de acceso rápido
+  Widget _buildQuickAccessCard({
+    required String title,
+    required String subtitle,
     required IconData icon,
+    required Color color,
     required VoidCallback onTap,
   }) {
-    return ActionChip(
-      avatar: Icon(icon, size: 20),
-      label: Text(label),
-      onPressed: onTap,
+    return AppCard(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            title,
+            style: AppTypography.bodyBold,
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            subtitle,
+            style: AppTypography.caption.copyWith(
+              color: AppColors.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }
