@@ -12,10 +12,10 @@ import '../screens/chat/chat_home_screen.dart';
 
 // Importar pantallas de Plan
 import '../screens/plans/plan_template_list_screen.dart';
-import '../screens/plans/plan_template_detail_screen.dart';
-import '../screens/plans/plan_customize_screen.dart';
-import '../screens/plans/plan_review_screen.dart';
-import '../screens/plans/plan_success_screen.dart';
+// import '../screens/plans/plan_template_detail_screen.dart'; // TODO: Implementar routing
+// import '../screens/plans/plan_customize_screen.dart'; // TODO: Implementar routing
+// import '../screens/plans/plan_review_screen.dart'; // TODO: Implementar routing
+// import '../screens/plans/plan_success_screen.dart'; // TODO: Implementar routing
 
 /// Bottom Navigation Bar de 5 tabs para PetCare
 /// Basado en documentación: 01-mapa-navegacion.md
