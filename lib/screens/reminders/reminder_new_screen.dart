@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../models/reminder.dart';
 import '../../data/mock_reminders.dart';
@@ -48,6 +47,42 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
     _loadPets();
   }
 
+  /// Verificar si hay mascotas y mostrar modal si no existen
+  Future<void> _checkAndShowNoPetsModal() async {
+    if (_availablePets.isEmpty) {
+      final shouldNavigate = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Sin mascotas registradas'),
+          content: const Text(
+            'Necesitas registrar una mascota primero para crear recordatorios.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Registrar mascota'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldNavigate == true && mounted) {
+        Navigator.pushNamed(context, '/pet/new').then((_) {
+          // Recargar mascotas después de registrar
+          _loadPets();
+        });
+      } else if (shouldNavigate == false && mounted) {
+        // Si cancela, volver atrás
+        Navigator.pop(context);
+      }
+    }
+  }
+
   /// Cargar mascotas disponibles desde el repositorio
   Future<void> _loadPets() async {
     final pets = await MockPetsRepository.getAllPets();
@@ -57,6 +92,13 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
       _selectedPetId = pets.isNotEmpty ? pets.first.id : null;
       _isLoadingPets = false;
     });
+
+    // Mostrar modal si no hay mascotas
+    if (pets.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkAndShowNoPetsModal();
+      });
+    }
   }
 
   @override
@@ -240,27 +282,6 @@ class _ReminderNewScreenState extends State<ReminderNewScreen> {
                   // Mascota asignada - Nielsen H6: Reconocimiento
                   if (_isLoadingPets)
                     const Center(child: CircularProgressIndicator())
-                  else if (_availablePets.isEmpty)
-                    Card(
-                      color: AppColors.warning.withOpacity(0.1),
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline, color: AppColors.warning),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                'Necesitas crear una mascota primero',
-                                style: AppTypography.body.copyWith(
-                                  color: AppColors.warning,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
                   else
                     DropdownButtonFormField<String>(
                       value: _selectedPetId,

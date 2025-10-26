@@ -13,8 +13,15 @@ import 'chat_active_screen.dart';
 /// PROC-005: Consulta Express IA
 /// 
 /// Objetivo: Punto de entrada para iniciar consultas con el asistente virtual
-class ChatHomeScreen extends StatelessWidget {
+class ChatHomeScreen extends StatefulWidget {
   const ChatHomeScreen({super.key});
+
+  @override
+  State<ChatHomeScreen> createState() => _ChatHomeScreenState();
+}
+
+class _ChatHomeScreenState extends State<ChatHomeScreen> {
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
@@ -32,24 +39,101 @@ class ChatHomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+      body: Column(
         children: [
-          // Hero Section - Bot Avatar y Mensaje de Bienvenida
-          _buildHeroSection(context),
+          // Barra de búsqueda
+          _buildSearchBar(),
           
-          const SizedBox(height: AppSpacing.xl),
-          
-          // Botón Principal: Nueva Consulta
-          _buildNewConsultButton(context),
-          
-          const SizedBox(height: AppSpacing.xl),
-          
-          // Sección de Historial
-          _buildHistorySection(context),
+          // Contenido con scroll
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+              children: [
+                // Hero Section - Bot Avatar y Mensaje de Bienvenida
+                _buildHeroSection(context),
+                
+                const SizedBox(height: AppSpacing.xl),
+                
+                // Botón Principal: Nueva Consulta
+                _buildNewConsultButton(context),
+                
+                const SizedBox(height: AppSpacing.xl),
+                
+                // Sección de Historial
+                _buildHistorySection(context),
+              ],
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  /// Barra de búsqueda
+  Widget _buildSearchBar() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.divider,
+            width: 1,
+          ),
+        ),
+      ),
+      child: TextField(
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+        },
+        decoration: InputDecoration(
+          hintText: 'Buscar consultas...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                  },
+                )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: AppColors.background,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Filtrar consultas por búsqueda
+  List<Consulta> _filterConsultas(List<Consulta> consultas) {
+    if (_searchQuery.isEmpty) {
+      return consultas;
+    }
+    
+    final query = _searchQuery.toLowerCase();
+    return consultas.where((consulta) {
+      // Buscar en topic
+      if (consulta.topic.toLowerCase().contains(query)) {
+        return true;
+      }
+      
+      // Buscar en mensajes
+      return consulta.messages.any((msg) => 
+        msg.text.toLowerCase().contains(query)
+      );
+    }).toList();
   }
 
   /// Hero section con bot y mensaje de bienvenida
@@ -141,8 +225,12 @@ class ChatHomeScreen extends StatelessWidget {
   /// Sección de historial de consultas
   Widget _buildHistorySection(BuildContext context) {
     // Cargar historial de consultas desde mock
-    final historial = MockConsultHistory.getHistorialConsultas();
+    final historialCompleto = MockConsultHistory.getHistorialConsultas();
+    
+    // Aplicar filtro de búsqueda
+    final historial = _filterConsultas(historialCompleto);
     final hasHistory = historial.isNotEmpty;
+    final hasHistoryTotal = historialCompleto.isNotEmpty;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,13 +244,13 @@ class ChatHomeScreen extends StatelessWidget {
                 'Consultas recientes',
                 style: AppTypography.h2,
               ),
-              if (hasHistory && historial.length > 3)
+              if (hasHistoryTotal && historialCompleto.length > 3)
                 TextButton(
                   onPressed: () {
                     // Futuro: Mostrar modal con todas las consultas si hay más de 3
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Mostrando ${historial.length} consultas recientes'),
+                        content: Text('Mostrando ${historialCompleto.length} consultas recientes'),
                         duration: const Duration(seconds: 2),
                       ),
                     );
@@ -175,7 +263,7 @@ class ChatHomeScreen extends StatelessWidget {
         
         const SizedBox(height: AppSpacing.md),
         
-        if (!hasHistory)
+        if (!hasHistoryTotal)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: const EmptyState(
@@ -184,8 +272,23 @@ class ChatHomeScreen extends StatelessWidget {
               instruction: '¡Empieza ahora y recibe respuestas al instante!',
             ),
           )
+        else if (!hasHistory && _searchQuery.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: EmptyState(
+              icon: Icons.search_off,
+              message: 'No se encontraron consultas',
+              instruction: 'Intenta con otros términos de búsqueda',
+              actionLabel: 'Limpiar búsqueda',
+              onAction: () {
+                setState(() {
+                  _searchQuery = '';
+                });
+              },
+            ),
+          )
         else
-          // Renderizar historial dinámicamente desde mock
+          // Renderizar historial filtrado dinámicamente
           ListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),

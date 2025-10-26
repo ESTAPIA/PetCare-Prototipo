@@ -111,6 +111,24 @@ class MockRemindersRepository {
     return pending.first;
   }
 
+  /// Obtener próximo recordatorio PENDIENTE (no completado, no pospuesto)
+  /// 
+  /// Retorna el recordatorio más cercano que esté en estado 'pending'
+  /// Ordena por fecha/hora ascendente
+  static Reminder? getNextPendingReminder() {
+    // Filtrar solo pendientes (no completados, no pospuestos)
+    final pending = getAllReminders()
+        .where((r) => r.status == ReminderStatus.pending)
+        .toList();
+    
+    if (pending.isEmpty) return null;
+    
+    // Ordenar por fecha (más cercano primero)
+    pending.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    
+    return pending.first;
+  }
+
   /// Crear recordatorio
   static Future<bool> createReminder(Reminder reminder) async {
     await Future.delayed(const Duration(milliseconds: 500));

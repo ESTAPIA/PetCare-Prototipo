@@ -206,7 +206,7 @@ class MockPlanTemplatesRepository {
   }
 
   /// Simular creación de plan
-  static Future<bool> createPlan({
+  static Future<Map<String, dynamic>> createPlan({
     required String templateId,
     required String petId,
     required List<Task> tasks,
@@ -215,7 +215,16 @@ class MockPlanTemplatesRepository {
     // Simular delay de operación
     await Future.delayed(const Duration(milliseconds: 1500));
 
-    // Mock: simular éxito
-    return true;
+    // Mock: generar IDs de recordatorios creados
+    final reminderIds = tasks
+        .asMap()
+        .entries
+        .map((entry) => 'reminder-${DateTime.now().millisecondsSinceEpoch}-${entry.key}')
+        .toList();
+
+    return {
+      'success': true,
+      'reminderIds': reminderIds,
+    };
   }
 }

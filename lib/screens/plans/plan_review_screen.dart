@@ -28,6 +28,7 @@ class PlanReviewScreen extends StatefulWidget {
 
 class _PlanReviewScreenState extends State<PlanReviewScreen> {
   bool _isCreating = false;
+  List<String> _createdReminderIds = []; // Para poder hacer undo
 
   @override
   Widget build(BuildContext context) {
@@ -213,7 +214,7 @@ class _PlanReviewScreenState extends State<PlanReviewScreen> {
             Expanded(
               flex: 2,
               child: FilledButton(
-                onPressed: _isCreating ? null : _createPlan,
+                onPressed: _isCreating ? null : _confirmAndCreatePlan,
                 child:
                     _isCreating
                         ? const SizedBox(
@@ -235,13 +236,40 @@ class _PlanReviewScreenState extends State<PlanReviewScreen> {
     );
   }
 
+  /// Confirmar antes de crear plan
+  Future<void> _confirmAndCreatePlan() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar creación'),
+        content: Text(
+          '¿Crear plan de cuidado con ${widget.tasks.length} tareas para Luna?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sí, crear'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _createPlan();
+    }
+  }
+
   /// Crear plan
   Future<void> _createPlan() async {
     setState(() => _isCreating = true);
 
     try {
       // Simular creación de plan
-      final success = await MockPlanTemplatesRepository.createPlan(
+      final result = await MockPlanTemplatesRepository.createPlan(
         templateId: widget.template.id,
         petId: 'pet-001', // Mock
         tasks: widget.tasks,
@@ -250,7 +278,10 @@ class _PlanReviewScreenState extends State<PlanReviewScreen> {
 
       if (!mounted) return;
 
-      if (success) {
+      if (result['success'] == true) {
+        // Guardar IDs de recordatorios creados
+        _createdReminderIds = List<String>.from(result['reminderIds'] ?? []);
+
         // Navegar a pantalla de éxito
         Navigator.pushReplacement(
           context,
@@ -259,6 +290,7 @@ class _PlanReviewScreenState extends State<PlanReviewScreen> {
                 (context) => PlanSuccessScreen(
                   taskCount: widget.tasks.length,
                   petName: 'Luna',
+                  createdReminderIds: _createdReminderIds,
                 ),
           ),
         );

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
@@ -38,12 +39,14 @@ class _ChatActiveScreenState extends State<ChatActiveScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
+  Timer? _botResponseTimer;
 
   // Estado
   final List<ChatMessage> _messages = [];
   bool _isTyping = false;
   bool _showSuggestions = true;
   bool _isReadonly = false;
+  bool _isLoadingHistory = false;
 
   @override
   void initState() {
@@ -56,24 +59,51 @@ class _ChatActiveScreenState extends State<ChatActiveScreen> {
     _textController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    _botResponseTimer?.cancel();
     super.dispose();
   }
 
   /// Inicializar chat (cargar consulta existente o empezar nueva)
-  void _initializeChat() {
+  Future<void> _initializeChat() async {
     if (widget.consultId != null) {
+      // Mostrar loading
+      setState(() {
+        _isLoadingHistory = true;
+      });
+      
+      // Simular delay de carga (en producción sería llamada async real)
+      await Future.delayed(const Duration(milliseconds: 300));
+      
       // Cargar consulta existente (modo readonly)
       final consulta = MockConsultHistory.getConsultaById(widget.consultId!);
+      
       if (consulta != null) {
         setState(() {
           _messages.addAll(consulta.messages);
           _isReadonly = true;
           _showSuggestions = false;
+          _isLoadingHistory = false;
         });
         // Auto-scroll al último mensaje después de cargar
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToBottom(animated: false);
         });
+      } else {
+        // Error: consulta no encontrada
+        setState(() {
+          _isLoadingHistory = false;
+        });
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo cargar la consulta'),
+              backgroundColor: AppColors.error,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.pop(context);
+        }
       }
     }
   }
@@ -94,8 +124,32 @@ class _ChatActiveScreenState extends State<ChatActiveScreen> {
     _focusNode.unfocus();
     _scrollToBottom();
 
-    // Simular delay de respuesta del bot (2-3 segundos)
-    Future.delayed(const Duration(milliseconds: 2500), () {
+    // Mostrar SnackBar con opción de deshacer
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Mensaje enviado'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Deshacer',
+          onPressed: () {
+            // Cancelar respuesta del bot
+            _botResponseTimer?.cancel();
+            
+            // Eliminar último mensaje del usuario
+            setState(() {
+              if (_messages.isNotEmpty && _messages.first.isUser) {
+                _messages.removeAt(0);
+              }
+              _isTyping = false;
+            });
+          },
+        ),
+      ),
+    );
+
+    // Simular delay de respuesta del bot usando Timer cancelable
+    _botResponseTimer = Timer(const Duration(milliseconds: 2500), () {
       if (!mounted) return;
 
       final botResponse = MockBotService.getResponse(text);
@@ -193,7 +247,7 @@ class _ChatActiveScreenState extends State<ChatActiveScreen> {
           if (!_isReadonly && _messages.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.check),
-              onPressed: _finishConsultation,
+              onPressed: _showFinishConfirmationDialog,
               tooltip: 'Finalizar consulta',
             ),
           if (!_isReadonly)
@@ -238,39 +292,55 @@ class _ChatActiveScreenState extends State<ChatActiveScreen> {
 
           // Lista de mensajes
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              reverse: true, // Último mensaje abajo
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-              itemCount: _messages.length +
-                  (_isTyping ? 1 : 0) +
-                  (_showSuggestions ? 1 : 0),
-              itemBuilder: (context, index) {
-                // Typing indicator
-                if (_isTyping && index == 0) {
-                  return _buildTypingIndicator();
-                }
+            child: _isLoadingHistory
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: AppSpacing.md),
+                        Text(
+                          'Cargando consulta...',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    reverse: true, // Último mensaje abajo
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                    itemCount: _messages.length +
+                        (_isTyping ? 1 : 0) +
+                        (_showSuggestions ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      // Typing indicator
+                      if (_isTyping && index == 0) {
+                        return _buildTypingIndicator();
+                      }
 
-                // Sugerencias rápidas
-                if (_showSuggestions &&
-                    index == (_isTyping ? 1 : 0) &&
-                    _messages.isEmpty) {
-                  return _buildSuggestions();
-                }
+                      // Sugerencias rápidas
+                      if (_showSuggestions &&
+                          index == (_isTyping ? 1 : 0) &&
+                          _messages.isEmpty) {
+                        return _buildSuggestions();
+                      }
 
-                // Mensajes normales
-                final messageIndex = index -
-                    (_isTyping ? 1 : 0) -
-                    (_showSuggestions && _messages.isEmpty ? 1 : 0);
+                      // Mensajes normales
+                      final messageIndex = index -
+                          (_isTyping ? 1 : 0) -
+                          (_showSuggestions && _messages.isEmpty ? 1 : 0);
 
-                if (messageIndex >= _messages.length) return const SizedBox();
+                      if (messageIndex >= _messages.length) return const SizedBox();
 
-                return ChatBubble(
-                  message: _messages[messageIndex],
-                  onActionTap: _handleActionTap,
-                );
-              },
-            ),
+                      return ChatBubble(
+                        message: _messages[messageIndex],
+                        onActionTap: _handleActionTap,
+                      );
+                    },
+                  ),
           ),
 
           // Input area
@@ -507,6 +577,35 @@ class _ChatActiveScreenState extends State<ChatActiveScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Entendido'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mostrar confirmación antes de finalizar consulta
+  void _showFinishConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Finalizar consulta?'),
+        content: const Text(
+          'La consulta se guardará en el historial y no podrás seguir escribiendo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _finishConsultation();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+            ),
+            child: const Text('Finalizar'),
           ),
         ],
       ),

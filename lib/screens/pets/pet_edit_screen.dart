@@ -82,6 +82,108 @@ class _PetEditScreenState extends State<PetEditScreen> {
            _selectedEspecie != null;
   }
 
+  /// Detectar si hay cambios sin guardar
+  /// 
+  /// Heurística 3: Control y libertad - prevenir pérdida accidental de datos
+  bool get _hasUnsavedChanges {
+    // Comparar nombre
+    if (_nombreController.text.trim() != widget.pet.nombre) {
+      return true;
+    }
+
+    // Comparar especie
+    if (_selectedEspecie != widget.pet.especie) {
+      return true;
+    }
+
+    // Comparar raza (manejar null)
+    final currentRaza = _razaController.text.trim().isEmpty 
+        ? null 
+        : _razaController.text.trim();
+    if (currentRaza != widget.pet.raza) {
+      return true;
+    }
+
+    // Comparar sexo
+    if (_selectedSexo != (widget.pet.sexo ?? PetGender.noEspecifica)) {
+      return true;
+    }
+
+    // Comparar fecha de nacimiento
+    if (_selectedFechaNacimiento != widget.pet.fechaNacimiento) {
+      return true;
+    }
+
+    // Comparar peso (manejar null y conversión)
+    final currentPeso = _pesoController.text.trim().isEmpty 
+        ? null 
+        : double.tryParse(_pesoController.text.trim());
+    if (currentPeso != widget.pet.pesoKg) {
+      return true;
+    }
+
+    // Comparar notas (manejar null)
+    final currentNotas = _notasController.text.trim().isEmpty 
+        ? null 
+        : _notasController.text.trim();
+    if (currentNotas != widget.pet.notas) {
+      return true;
+    }
+
+    return false; // No hay cambios
+  }
+
+  /// Mostrar diálogo de confirmación para descartar cambios
+  /// 
+  /// Heurística 3: Control y libertad - confirmación antes de perder datos
+  /// Heurística 5: Prevención de errores - evitar pérdida accidental
+  Future<bool> _showDiscardChangesDialog() async {
+    final shouldDiscard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Descartar cambios?'),
+        content: Text(
+          'Has realizado cambios en ${widget.pet.nombre}. Si sales ahora, se perderán los cambios no guardados.',
+          style: AppTypography.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Quedarse'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Descartar'),
+          ),
+        ],
+      ),
+    );
+
+    return shouldDiscard ?? false; // Si cierra diálogo, no descartar
+  }
+
+  /// Manejar intento de cerrar pantalla
+  /// 
+  /// Intercepta el botón back y el botón X del AppBar
+  Future<bool> _onWillPop() async {
+    // Si está guardando, no permitir cerrar
+    if (_isSaving) {
+      return false;
+    }
+
+    // Si NO hay cambios, permitir cerrar inmediatamente
+    if (!_hasUnsavedChanges) {
+      return true;
+    }
+
+    // Si hay cambios, mostrar confirmación
+    return await _showDiscardChangesDialog();
+  }
+
   /// Seleccionar fecha de nacimiento
   /// 
   /// Abre DatePicker nativo con rango válido (no futuro)
@@ -244,24 +346,49 @@ class _PetEditScreenState extends State<PetEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // AppBar con botón cerrar
-      // Heurística 3: Control y libertad del usuario
-      appBar: AppBar(
-        title: Text(
-          'Editar mascota',
-          style: AppTypography.h1,
+    // PopScope intercepta el botón back del sistema y el botón X del AppBar
+    // Heurística 3: Control y libertad - prevenir pérdida accidental de datos
+    return PopScope(
+      canPop: false, // No permitir pop automático
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return; // Ya hizo pop, no hacer nada
+        
+        // Verificar si puede cerrar
+        if (!context.mounted) return;
+        
+        final shouldPop = await _onWillPop();
+        if (shouldPop && context.mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        // AppBar con botón cerrar
+        // Heurística 3: Control y libertad del usuario
+        appBar: AppBar(
+          title: Text(
+            'Editar mascota',
+            style: AppTypography.h1,
+          ),
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () async {
+              // Usar la misma lógica de _onWillPop
+              if (!mounted) return;
+              
+              final navigator = Navigator.of(context);
+              final shouldPop = await _onWillPop();
+              
+              if (shouldPop && mounted) {
+                navigator.pop();
+              }
+            },
+            tooltip: 'Cerrar sin guardar',
+          ),
         ),
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-          tooltip: 'Cerrar sin guardar',
-        ),
-      ),
-      backgroundColor: AppColors.background,
+        backgroundColor: AppColors.background,
       
       body: Form(
         key: _formKey,
@@ -480,7 +607,8 @@ class _PetEditScreenState extends State<PetEditScreen> {
             ),
           ],
         ),
-      ),
-    );
+      ), // Cierre de Form
+    ), // Cierre de Scaffold
+    ); // Cierre de PopScope
   }
 }

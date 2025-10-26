@@ -5,8 +5,11 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../data/mock_reminders.dart';
+import '../../data/mock_pets.dart';
 import '../../models/reminder.dart';
+import '../../models/pet.dart';
 import '../../widgets/common/app_card.dart';
+import 'reminder_edit_screen.dart';
 
 /// SCR-REM-CALENDAR: Vista calendario mensual
 /// PROC-003: Recordatorios
@@ -21,6 +24,8 @@ class _ReminderCalendarScreenState extends State<ReminderCalendarScreen> {
   late DateTime _focusedDay;
   late DateTime _selectedDay;
   late Map<DateTime, List<Reminder>> _remindersByDate;
+  bool _isLoading = true;
+  List<Pet> _pets = [];
 
   @override
   void initState() {
@@ -28,10 +33,29 @@ class _ReminderCalendarScreenState extends State<ReminderCalendarScreen> {
     final now = DateTime.now();
     _focusedDay = DateTime(now.year, now.month, now.day);
     _selectedDay = _focusedDay;
-    _loadReminders();
+    _loadData();
   }
 
-  void _loadReminders() {
+  Future<void> _loadData() async {
+    await Future.wait([
+      _loadReminders(),
+      _loadPets(),
+    ]);
+  }
+
+  Future<void> _loadPets() async {
+    final pets = await MockPetsRepository.getAllPets();
+    setState(() {
+      _pets = pets;
+    });
+  }
+
+  Future<void> _loadReminders() async {
+    setState(() => _isLoading = true);
+
+    // Simular delay mínimo para mostrar loading
+    await Future.delayed(const Duration(milliseconds: 300));
+
     final reminders = MockRemindersRepository.getAllReminders();
     _remindersByDate = {};
 
@@ -42,6 +66,8 @@ class _ReminderCalendarScreenState extends State<ReminderCalendarScreen> {
       _remindersByDate.putIfAbsent(normalizedDate, () => []);
       _remindersByDate[normalizedDate]!.add(reminder);
     }
+
+    setState(() => _isLoading = false);
   }
 
   @override
@@ -57,13 +83,15 @@ class _ReminderCalendarScreenState extends State<ReminderCalendarScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildCalendar(),
-          const Divider(height: 1),
-          Expanded(child: _buildSelectedDayReminders()),
-        ],
-      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildCalendar(),
+                const Divider(height: 1),
+                Expanded(child: _buildSelectedDayReminders()),
+              ],
+            ),
     );
   }
 
@@ -214,8 +242,17 @@ class _ReminderCalendarScreenState extends State<ReminderCalendarScreen> {
       opacity: isDone ? 0.6 : 1.0,
       child: AppCard(
         margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-        onTap: () {
-          // TODO: Navegar a detalle
+        onTap: () async {
+          // FASE 2 Paso B: Navegar a pantalla de edición
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReminderEditScreen(reminder: reminder),
+            ),
+          );
+          if (result == true && mounted) {
+            _loadData(); // Recargar calendario y lista tras editar/eliminar
+          }
         },
         child: Row(
           children: [
@@ -267,7 +304,7 @@ class _ReminderCalendarScreenState extends State<ReminderCalendarScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Luna', // Mock
+                        _getPetName(reminder.petId),
                         style: AppTypography.caption.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -299,6 +336,14 @@ class _ReminderCalendarScreenState extends State<ReminderCalendarScreen> {
         return AppColors.success;
       case ReminderType.other:
         return AppColors.textSecondary;
+    }
+  }
+
+  String _getPetName(String petId) {
+    try {
+      return _pets.firstWhere((p) => p.id == petId).nombre;
+    } catch (e) {
+      return 'Mascota';
     }
   }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/loading_state.dart';
 import '../../data/models/veterinaria.dart';
 import '../../data/mock/mock_veterinarias.dart';
 import '../../services/favorites_service.dart';
@@ -28,6 +30,9 @@ class VetMapScreen extends StatefulWidget {
 class _VetMapScreenState extends State<VetMapScreen> {
   bool _showMap = true; // true: mapa, false: lista
   List<Veterinaria> _veterinarias = [];
+  bool _isLoading = true; // Estado de carga inicial
+  String _searchQuery = ''; // Búsqueda por nombre
+  OrdenVeterinaria _ordenActual = OrdenVeterinaria.distancia;
   
   // PASO E: Favoritos
   Set<String> _favoriteIds = {};
@@ -42,8 +47,13 @@ class _VetMapScreenState extends State<VetMapScreen> {
   @override
   void initState() {
     super.initState();
-    _loadVeterinarias();
-    _loadFavorites();
+    _initializeData();
+  }
+  
+  /// Inicializa datos de forma secuencial
+  Future<void> _initializeData() async {
+    await _loadFavorites();
+    await _loadVeterinarias();
   }
   
   /// Carga los IDs de favoritos desde el servicio
@@ -56,15 +66,33 @@ class _VetMapScreenState extends State<VetMapScreen> {
   }
 
   /// Carga las veterinarias ordenadas por distancia
-  void _loadVeterinarias() {
+  Future<void> _loadVeterinarias() async {
+    await Future.delayed(const Duration(milliseconds: 500));
     setState(() {
       _veterinarias = MockVeterinarias.getVeterinariasPorDistancia();
+      _isLoading = false;
     });
+    _aplicarFiltros();
+  }
+
+  /// Maneja el pull-to-refresh
+  Future<void> _onRefresh() async {
+    setState(() {
+      _isLoading = true;
+    });
+    await _initializeData();
   }
 
   /// Aplica los filtros activos sobre las veterinarias
   void _aplicarFiltros() {
     List<Veterinaria> resultado = MockVeterinarias.getVeterinariasPorDistancia();
+    
+    // Filtro por búsqueda
+    if (_searchQuery.isNotEmpty) {
+      resultado = resultado.where((vet) {
+        return vet.nombre.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList();
+    }
     
     // Filtro Favoritos
     if (_filtroFavoritos) {
@@ -86,9 +114,94 @@ class _VetMapScreenState extends State<VetMapScreen> {
       resultado = resultado.where((vet) => vet.atiende('Gatos')).toList();
     }
     
+    // Aplicar ordenamiento
+    _ordenarVeterinarias(resultado);
+    
     setState(() {
       _veterinarias = resultado;
     });
+  }
+
+  /// Ordena las veterinarias según el criterio seleccionado
+  void _ordenarVeterinarias(List<Veterinaria> lista) {
+    switch (_ordenActual) {
+      case OrdenVeterinaria.distancia:
+        lista.sort((a, b) => 
+          a.calcularDistancia(MockVeterinarias.userLat, MockVeterinarias.userLng)
+            .compareTo(b.calcularDistancia(MockVeterinarias.userLat, MockVeterinarias.userLng))
+        );
+        break;
+      case OrdenVeterinaria.rating:
+        lista.sort((a, b) => b.rating.compareTo(a.rating)); // DESC
+        break;
+      case OrdenVeterinaria.nombre:
+        lista.sort((a, b) => a.nombre.compareTo(b.nombre));
+        break;
+    }
+  }
+
+  /// Llamar desde la card de lista
+  Future<void> _llamarDesdeCard(Veterinaria vet) async {
+    final Uri telUri = Uri(
+      scheme: 'tel',
+      path: vet.telefono,
+    );
+
+    try {
+      if (await canLaunchUrl(telUri)) {
+        await launchUrl(telUri);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo abrir el marcador'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al intentar llamar'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  /// Navegar desde la card de lista
+  Future<void> _navegarDesdeCard(Veterinaria vet) async {
+    final Uri geoUri = Uri(
+      scheme: 'geo',
+      path: '${vet.latitude},${vet.longitude}',
+    );
+
+    try {
+      if (await canLaunchUrl(geoUri)) {
+        await launchUrl(geoUri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo abrir la navegación'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al abrir navegación'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   /// Limpia todos los filtros activos
@@ -99,7 +212,7 @@ class _VetMapScreenState extends State<VetMapScreen> {
       _filtroPerros = false;
       _filtroGatos = false;
     });
-    _loadVeterinarias();
+    _aplicarFiltros();
   }
 
   /// Cuenta la cantidad de filtros activos
@@ -111,9 +224,29 @@ class _VetMapScreenState extends State<VetMapScreen> {
     if (_filtroGatos) count++;
     return count;
   }
+
+  /// Calcula cuántos resultados hay por cada tipo de filtro
+  Map<String, int> _calcularContadoresFiltros() {
+    var base = MockVeterinarias.getVeterinariasPorDistancia();
+    
+    // Aplicar búsqueda si existe
+    if (_searchQuery.isNotEmpty) {
+      base = base.where((vet) {
+        return vet.nombre.toLowerCase().contains(_searchQuery.toLowerCase());
+      }).toList();
+    }
+    
+    return {
+      'favoritos': base.where((v) => _favoriteIds.contains(v.id)).length,
+      '24h': base.where((v) => v.emergencias24h).length,
+      'perros': base.where((v) => v.atiende('Perros')).length,
+      'gatos': base.where((v) => v.atiende('Gatos')).length,
+    };
+  }
   
   /// Toggle favorito desde la card de la lista
   Future<void> _toggleFavoriteInCard(String vetId) async {
+    final previouslyFavorite = _favoriteIds.contains(vetId);
     final wasAdded = await _favoritesService.toggleFavorite(vetId);
     
     // Actualizar estado local
@@ -134,7 +267,24 @@ class _VetMapScreenState extends State<VetMapScreen> {
               ? 'Agregado a favoritos' 
               : 'Eliminado de favoritos',
           ),
-          duration: const Duration(seconds: 1),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Deshacer',
+            onPressed: () async {
+              await _favoritesService.toggleFavorite(vetId);
+              setState(() {
+                if (previouslyFavorite) {
+                  _favoriteIds.add(vetId);
+                } else {
+                  _favoriteIds.remove(vetId);
+                }
+              });
+              
+              if (_filtroFavoritos) {
+                _aplicarFiltros();
+              }
+            },
+          ),
         ),
       );
     }
@@ -145,6 +295,136 @@ class _VetMapScreenState extends State<VetMapScreen> {
     }
   }
 
+  /// Construye la barra de búsqueda
+  Widget _buildSearchBar() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(
+            color: AppColors.divider,
+            width: 1,
+          ),
+        ),
+      ),
+      child: TextField(
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+          _aplicarFiltros();
+        },
+        decoration: InputDecoration(
+          hintText: 'Buscar veterinaria...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                    _aplicarFiltros();
+                  },
+                )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+            borderSide: BorderSide.none,
+          ),
+          filled: true,
+          fillColor: AppColors.background,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+        ),
+        style: AppTypography.body,
+      ),
+    );
+  }
+
+  /// Construye el toggle entre vista lista y mapa
+  Widget _buildViewToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          bottom: BorderSide(color: AppColors.divider),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Dropdown de ordenamiento
+          Expanded(
+            child: Row(
+              children: [
+                Text(
+                  'Ordenar:',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                DropdownButton<OrdenVeterinaria>(
+                  value: _ordenActual,
+                  isDense: true,
+                  underline: Container(),
+                  items: OrdenVeterinaria.values.map((orden) {
+                    return DropdownMenuItem(
+                      value: orden,
+                      child: Text(
+                        orden.label,
+                        style: AppTypography.body,
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (OrdenVeterinaria? nuevo) {
+                    if (nuevo != null) {
+                      setState(() {
+                        _ordenActual = nuevo;
+                      });
+                      _aplicarFiltros();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(width: AppSpacing.md),
+          
+          // Segmented button para vista
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment<bool>(
+                value: false,
+                label: Text('Lista'),
+                icon: Icon(Icons.list, size: 18),
+              ),
+              ButtonSegment<bool>(
+                value: true,
+                label: Text('Mapa'),
+                icon: Icon(Icons.map, size: 18),
+              ),
+            ],
+            selected: {_showMap},
+            onSelectionChanged: (Set<bool> newSelection) {
+              setState(() {
+                _showMap = newSelection.first;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,15 +432,6 @@ class _VetMapScreenState extends State<VetMapScreen> {
         title: const Text('Veterinarias'),
         automaticallyImplyLeading: widget.sourceContext != null, // Mostrar back si viene de otra pantalla
         actions: [
-          IconButton(
-            icon: Icon(_showMap ? Icons.list : Icons.map),
-            onPressed: () {
-              setState(() {
-                _showMap = !_showMap;
-              });
-            },
-            tooltip: _showMap ? 'Ver lista' : 'Ver mapa',
-          ),
           IconButton(
             icon: _contarFiltrosActivos() > 0
                 ? Badge.count(
@@ -231,8 +502,14 @@ class _VetMapScreenState extends State<VetMapScreen> {
               ),
             ),
           
+          // Toggle vista
+          _buildViewToggle(),
+          
           // Filtros rápidos
           _buildQuickFilters(),
+
+          // Barra de búsqueda
+          _buildSearchBar(),
           
           // Vista de mapa o lista
           Expanded(
@@ -245,6 +522,9 @@ class _VetMapScreenState extends State<VetMapScreen> {
 
   /// Construir filtros rápidos
   Widget _buildQuickFilters() {
+    // Calcular contadores una sola vez
+    final contadores = _calcularContadoresFiltros();
+    
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
@@ -256,60 +536,85 @@ class _VetMapScreenState extends State<VetMapScreen> {
           bottom: BorderSide(color: AppColors.divider),
         ),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            FilterChip(
-              label: const Text('Favoritos'),
-              selected: _filtroFavoritos,
-              avatar: Icon(
-                Icons.star,
-                size: 18,
-                color: _filtroFavoritos ? AppColors.surface : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Mensaje de límite
+          if (_contarFiltrosActivos() >= 3)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Text(
+                'Máximo 3 filtros activos',
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.warning,
+                ),
               ),
-              onSelected: (selected) {
-                setState(() {
-                  _filtroFavoritos = selected;
-                });
-                _aplicarFiltros();
-              },
             ),
-            const SizedBox(width: AppSpacing.sm),
-            FilterChip(
-              label: const Text('24 horas'),
-              selected: _filtro24h,
-              onSelected: (selected) {
-                setState(() {
-                  _filtro24h = selected;
-                });
-                _aplicarFiltros();
-              },
+          
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                FilterChip(
+                  label: Text('Favoritos (${contadores['favoritos']})'),
+                  selected: _filtroFavoritos,
+                  avatar: Icon(
+                    Icons.star,
+                    size: 18,
+                    color: _filtroFavoritos ? AppColors.surface : null,
+                  ),
+                  onSelected: !_filtroFavoritos && _contarFiltrosActivos() >= 3
+                      ? null
+                      : (selected) {
+                          setState(() {
+                            _filtroFavoritos = selected;
+                          });
+                          _aplicarFiltros();
+                        },
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                FilterChip(
+                  label: Text('24 horas (${contadores['24h']})'),
+                  selected: _filtro24h,
+                  onSelected: !_filtro24h && _contarFiltrosActivos() >= 3
+                      ? null
+                      : (selected) {
+                          setState(() {
+                            _filtro24h = selected;
+                          });
+                          _aplicarFiltros();
+                        },
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                FilterChip(
+                  label: Text('Perros (${contadores['perros']})'),
+                  selected: _filtroPerros,
+                  onSelected: !_filtroPerros && _contarFiltrosActivos() >= 3
+                      ? null
+                      : (selected) {
+                          setState(() {
+                            _filtroPerros = selected;
+                          });
+                          _aplicarFiltros();
+                        },
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                FilterChip(
+                  label: Text('Gatos (${contadores['gatos']})'),
+                  selected: _filtroGatos,
+                  onSelected: !_filtroGatos && _contarFiltrosActivos() >= 3
+                      ? null
+                      : (selected) {
+                          setState(() {
+                            _filtroGatos = selected;
+                          });
+                          _aplicarFiltros();
+                        },
+                ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.sm),
-            FilterChip(
-              label: const Text('Perros'),
-              selected: _filtroPerros,
-              onSelected: (selected) {
-                setState(() {
-                  _filtroPerros = selected;
-                });
-                _aplicarFiltros();
-              },
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            FilterChip(
-              label: const Text('Gatos'),
-              selected: _filtroGatos,
-              onSelected: (selected) {
-                setState(() {
-                  _filtroGatos = selected;
-                });
-                _aplicarFiltros();
-              },
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -413,55 +718,87 @@ class _VetMapScreenState extends State<VetMapScreen> {
 
   /// Vista de lista
   Widget _buildListView() {
-    if (_veterinarias.isEmpty) {
-      // Mensaje específico para filtro de favoritos vacío
-      if (_filtroFavoritos) {
-        return EmptyState(
-          icon: Icons.star_outline,
-          message: 'Aún no tienes veterinarias favoritas',
-          instruction: 'Explora y marca veterinarias como favoritas',
-          actionLabel: 'Ver todas',
-          onAction: () {
-            setState(() {
-              _filtroFavoritos = false;
-            });
-            _loadVeterinarias();
-          },
-        );
-      }
-      
-      return EmptyState(
-        icon: Icons.local_hospital_outlined,
-        message: _contarFiltrosActivos() > 0
-            ? 'No hay veterinarias con estos filtros'
-            : 'No hay veterinarias cercanas',
-        instruction: _contarFiltrosActivos() > 0
-            ? 'Intenta con menos filtros o límpialo todos'
-            : 'Intenta activar tu ubicación',
-        actionLabel: _contarFiltrosActivos() > 0 ? 'Limpiar filtros' : null,
-        onAction: _contarFiltrosActivos() > 0 ? _limpiarFiltros : null,
+    // Mostrar skeleton mientras carga
+    if (_isLoading) {
+      return ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        itemCount: 3,
+        itemBuilder: (context, index) {
+          return const SkeletonCard(height: 120);
+        },
       );
     }
     
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      itemCount: _veterinarias.length,
-      itemBuilder: (context, index) {
-        final vet = _veterinarias[index];
-        return _buildVetCard(
-          vet: vet,
-          name: vet.nombre,
-          address: vet.direccion,
-          distance: vet.distanciaFormateada(
-            MockVeterinarias.userLat,
-            MockVeterinarias.userLng,
+    if (_veterinarias.isEmpty) {
+      // Mensaje específico para filtro de favoritos vacío
+      if (_filtroFavoritos) {
+        return RefreshIndicator(
+          onRefresh: _onRefresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: EmptyState(
+                icon: Icons.star_outline,
+                message: 'Aún no tienes veterinarias favoritas',
+                instruction: 'Explora y marca veterinarias como favoritas',
+                actionLabel: 'Ver todas',
+                onAction: () {
+                  setState(() {
+                    _filtroFavoritos = false;
+                  });
+                  _loadVeterinarias();
+                },
+              ),
+            ),
           ),
-          rating: vet.rating,
-          reviews: vet.reviewsCount,
-          isOpen: vet.estaAbierto(),
-          isFavorite: _favoriteIds.contains(vet.id),
         );
-      },
+      }
+      
+      return RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: EmptyState(
+              icon: Icons.local_hospital_outlined,
+              message: _contarFiltrosActivos() > 0
+                  ? 'No hay veterinarias con estos filtros'
+                  : 'No hay veterinarias cercanas',
+              instruction: _contarFiltrosActivos() > 0
+                  ? 'Intenta con menos filtros o límpialo todos'
+                  : 'Intenta activar tu ubicación',
+              actionLabel: _contarFiltrosActivos() > 0 ? 'Limpiar filtros' : null,
+              onAction: _contarFiltrosActivos() > 0 ? _limpiarFiltros : null,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        itemCount: _veterinarias.length,
+        itemBuilder: (context, index) {
+          final vet = _veterinarias[index];
+          return _buildVetCard(
+            vet: vet,
+            name: vet.nombre,
+            address: vet.direccion,
+            distance: vet.distanciaFormateada(
+              MockVeterinarias.userLat,
+              MockVeterinarias.userLng,
+            ),
+            rating: vet.rating,
+            reviews: vet.reviewsCount,
+            isOpen: vet.estaAbierto(),
+            isFavorite: _favoriteIds.contains(vet.id),
+          );
+        },
+      ),
     );
   }
 
@@ -658,8 +995,48 @@ class _VetMapScreenState extends State<VetMapScreen> {
               ),
             ],
           ),
+          
+          const SizedBox(height: AppSpacing.sm),
+          
+          // Botones de acción rápida
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton.outlined(
+                icon: const Icon(Icons.phone, size: 20),
+                onPressed: () => _llamarDesdeCard(vet),
+                tooltip: 'Llamar',
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                constraints: const BoxConstraints(
+                  minWidth: 40,
+                  minHeight: 40,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              IconButton.outlined(
+                icon: const Icon(Icons.directions, size: 20),
+                onPressed: () => _navegarDesdeCard(vet),
+                tooltip: 'Cómo llegar',
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                constraints: const BoxConstraints(
+                  minWidth: 40,
+                  minHeight: 40,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
+}
+
+/// Opciones de ordenamiento de veterinarias
+enum OrdenVeterinaria {
+  distancia('Distancia'),
+  rating('Calificación'),
+  nombre('Nombre A-Z');
+  
+  final String label;
+  const OrdenVeterinaria(this.label);
 }

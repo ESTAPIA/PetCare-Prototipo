@@ -7,6 +7,7 @@ import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
+import '../../widgets/common/loading_state.dart';
 import '../../data/models/veterinaria.dart';
 import '../../data/models/review.dart';
 import '../../data/mock/mock_veterinarias.dart';
@@ -32,6 +33,9 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
   Veterinaria? _veterinaria;
   List<Review> _reviews = [];
   bool _isFavorite = false;
+  bool _isLoading = true;
+  bool _mostrarTodosHorarios = false;
+  bool _mostrarTodasReviews = false;
   final _favoritesService = FavoritesService();
 
   @override
@@ -42,11 +46,14 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
 
   /// Carga los datos de la veterinaria y sus reviews
   Future<void> _loadData() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    
     setState(() {
       _veterinaria = MockVeterinarias.getVeterinariaById(widget.veterinariaId);
       if (_veterinaria != null) {
         _reviews = MockVeterinarias.getReviewsForVet(widget.veterinariaId);
       }
+      _isLoading = false;
     });
     
     // Cargar estado de favorito
@@ -62,6 +69,7 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
   Future<void> _toggleFavorite() async {
     if (_veterinaria == null) return;
     
+    final previousState = _isFavorite;
     final newState = await _favoritesService.toggleFavorite(widget.veterinariaId);
     
     setState(() {
@@ -72,14 +80,50 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(newState ? 'Agregado a favoritos' : 'Quitado de favoritos'),
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: 'Deshacer',
+            onPressed: () async {
+              await _favoritesService.toggleFavorite(widget.veterinariaId);
+              setState(() {
+                _isFavorite = previousState;
+              });
+            },
+          ),
         ),
       );
     }
   }
 
-  /// Maneja la acción de llamar a la veterinaria
+  /// Muestra diálogo de confirmación antes de llamar
   Future<void> _llamar() async {
+    if (_veterinaria == null) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Llamar a la veterinaria?'),
+        content: Text('Se abrirá el marcador para llamar a ${_veterinaria!.telefono}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Llamar'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      _ejecutarLlamada();
+    }
+  }
+
+  /// Ejecuta la llamada telefónica
+  Future<void> _ejecutarLlamada() async {
     if (_veterinaria == null) return;
 
     final Uri telUri = Uri(
@@ -216,6 +260,29 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Mostrar loading skeleton
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Veterinaria'),
+        ),
+        body: const Padding(
+          padding: EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            children: [
+              SkeletonCard(height: 150), // Header
+              SizedBox(height: AppSpacing.md),
+              SkeletonCard(height: 80),  // Botones
+              SizedBox(height: AppSpacing.md),
+              SkeletonCard(height: 120), // Info
+              SizedBox(height: AppSpacing.md),
+              SkeletonCard(height: 200), // Horarios
+            ],
+          ),
+        ),
+      );
+    }
+    
     // Manejo de veterinaria no encontrada
     if (_veterinaria == null) {
       return Scaffold(
@@ -459,98 +526,82 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
           const SizedBox(height: AppSpacing.md),
           
           // Dirección
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.location_on,
-                size: 20,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: GestureDetector(
-                  onLongPress: () {
-                    Clipboard.setData(ClipboardData(text: _veterinaria!.direccion));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Dirección copiada al portapapeles'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Dirección',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _veterinaria!.direccion,
-                        style: AppTypography.body,
-                      ),
-                      Text(
-                        _veterinaria!.ciudad,
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          _buildCopyableField(
+            icon: Icons.location_on,
+            label: 'Dirección',
+            value: _veterinaria!.direccion,
+            subtitle: _veterinaria!.ciudad,
           ),
           
           const SizedBox(height: AppSpacing.md),
           
           // Teléfono
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.phone,
-                size: 20,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: GestureDetector(
-                  onLongPress: () {
-                    Clipboard.setData(ClipboardData(text: _veterinaria!.telefono));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Teléfono copiado al portapapeles'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Teléfono',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _veterinaria!.telefono,
-                        style: AppTypography.body,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+          _buildCopyableField(
+            icon: Icons.phone,
+            label: 'Teléfono',
+            value: _veterinaria!.telefono,
           ),
         ],
       ),
+    );
+  }
+
+  /// Widget para campo copiable con hint visual
+  Widget _buildCopyableField({
+    required IconData icon,
+    required String label,
+    required String value,
+    String? subtitle,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: AppColors.primary),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: GestureDetector(
+            onLongPress: () {
+              Clipboard.setData(ClipboardData(text: value));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$label copiado al portapapeles'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      label,
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Icon(
+                      Icons.content_copy,
+                      size: 12,
+                      color: AppColors.textDisabled,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(value, style: AppTypography.body),
+                if (subtitle != null)
+                  Text(
+                    subtitle,
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -580,8 +631,11 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
           
           const SizedBox(height: AppSpacing.md),
           
-          // Tabla de horarios
-          ...diasSemana.asMap().entries.map((entry) {
+          // Tabla de horarios - mostrar solo hoy o todos
+          ...(_mostrarTodosHorarios 
+            ? diasSemana.asMap().entries 
+            : diasSemana.asMap().entries.where((e) => e.key == hoy)
+          ).map((entry) {
             final index = entry.key;
             final dia = entry.value;
             final horario = _veterinaria!.horarios[dia] ?? 'Cerrado';
@@ -621,6 +675,20 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
               ),
             );
           }),
+          
+          // Botón expandir/colapsar
+          const SizedBox(height: AppSpacing.sm),
+          Center(
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _mostrarTodosHorarios = !_mostrarTodosHorarios;
+                });
+              },
+              icon: Icon(_mostrarTodosHorarios ? Icons.expand_less : Icons.expand_more),
+              label: Text(_mostrarTodosHorarios ? 'Ver menos' : 'Ver todos los días'),
+            ),
+          ),
         ],
       ),
     );
@@ -748,7 +816,7 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
           
           const SizedBox(height: AppSpacing.md),
           
-          // Lista de reviews
+          // Lista de reviews - mostrar solo 5 o todas
           if (_reviews.isEmpty)
             Center(
               child: Padding(
@@ -761,8 +829,33 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
                 ),
               ),
             )
-          else
-            ..._reviews.map((review) => _buildReviewItem(review)),
+          else ...[
+            ...(_mostrarTodasReviews 
+              ? _reviews 
+              : _reviews.take(5)
+            ).map((review) => _buildReviewItem(review)),
+            
+            // Botón "Ver todas" si hay más de 5
+            if (_reviews.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.md),
+                child: Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _mostrarTodasReviews = !_mostrarTodasReviews;
+                      });
+                    },
+                    icon: Icon(_mostrarTodasReviews ? Icons.expand_less : Icons.expand_more),
+                    label: Text(
+                      _mostrarTodasReviews 
+                        ? 'Ver menos' 
+                        : 'Ver todas las reseñas (${_reviews.length})',
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
     );

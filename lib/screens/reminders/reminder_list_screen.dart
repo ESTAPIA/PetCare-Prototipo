@@ -4,11 +4,14 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../data/mock_reminders.dart';
+import '../../data/mock_pets.dart';
 import '../../models/reminder.dart';
+import '../../models/pet.dart';
 import '../../widgets/common/app_card.dart';
 import '../../widgets/common/empty_state.dart';
 import 'reminder_new_screen.dart';
 import 'reminder_calendar_screen.dart';
+import 'reminder_edit_screen.dart';
 
 /// SCR-REM-LIST: Lista de recordatorios agrupados
 /// PROC-003: Recordatorios
@@ -23,12 +26,21 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
   String _selectedFilter = 'Todos';
   bool _isLoading = true;
   List<Reminder> _reminders = [];
+  List<Pet> _pets = [];
   final Set<String> _processingIds = {}; // IDs en proceso
 
   @override
   void initState() {
     super.initState();
     _loadReminders();
+    _loadPets();
+  }
+
+  Future<void> _loadPets() async {
+    final pets = await MockPetsRepository.getAllPets();
+    setState(() {
+      _pets = pets;
+    });
   }
 
   Future<void> _loadReminders() async {
@@ -200,6 +212,18 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
       opacity: isDone ? 0.5 : (isProcessing ? 0.7 : 1.0),
       child: AppCard(
         margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+        onTap: () async {
+          // FASE 2 Paso B: Navegar a pantalla de edición
+          final result = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReminderEditScreen(reminder: reminder),
+            ),
+          );
+          if (result == true && mounted) {
+            _loadReminders(); // Recargar lista tras editar/eliminar
+          }
+        },
         child: Row(
           children: [
             Container(
@@ -245,7 +269,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    '${reminder.time} • Luna',
+                    '${reminder.time} • ${_getPetName(reminder.petId)}',
                     style: AppTypography.caption.copyWith(
                       color: AppColors.textSecondary,
                     ),
@@ -317,6 +341,14 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
     }
   }
 
+  String _getPetName(String petId) {
+    try {
+      return _pets.firstWhere((p) => p.id == petId).nombre;
+    } catch (e) {
+      return 'Mascota';
+    }
+  }
+
   Future<void> _markAsDone(Reminder reminder) async {
     // Prevenir múltiples clics
     if (_processingIds.contains(reminder.id)) {
@@ -379,7 +411,7 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
                 textColor: Colors.white,
                 onPressed: () => _undoMarkAsDone(reminder.id),
               ),
-              duration: const Duration(seconds: 4),
+              duration: const Duration(seconds: 8),
             ),
           );
         }
@@ -538,15 +570,6 @@ class _ReminderListScreenState extends State<ReminderListScreen> {
         ),
       );
     }
-  }
-
-  void _createReminder() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Crear recordatorio próximamente'),
-        action: SnackBarAction(label: 'OK', onPressed: () {}),
-      ),
-    );
   }
 
   List<Reminder> _getFilteredReminders() {

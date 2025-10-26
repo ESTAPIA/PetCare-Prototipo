@@ -2,19 +2,28 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../navigation/app_routes.dart';
+import '../../data/mock_reminders.dart';
 
 /// SCR-PLAN-SUCCESS: Confirmación de plan creado
 /// PROC-002: Plan de Cuidado Rápido
-class PlanSuccessScreen extends StatelessWidget {
+class PlanSuccessScreen extends StatefulWidget {
   final int taskCount;
   final String petName;
+  final List<String> createdReminderIds;
 
   const PlanSuccessScreen({
     super.key,
     required this.taskCount,
     required this.petName,
+    required this.createdReminderIds,
   });
+
+  @override
+  State<PlanSuccessScreen> createState() => _PlanSuccessScreenState();
+}
+
+class _PlanSuccessScreenState extends State<PlanSuccessScreen> {
+  bool _isUndoing = false;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +69,7 @@ class PlanSuccessScreen extends StatelessWidget {
 
               // Detalle
               Text(
-                '$taskCount recordatorios agregados para $petName',
+                '${widget.taskCount} recordatorios agregados para ${widget.petName}',
                 style: AppTypography.body.copyWith(
                   color: AppColors.textSecondary,
                 ),
@@ -73,7 +82,9 @@ class PlanSuccessScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
-                  onPressed: () {
+                  onPressed: _isUndoing
+                      ? null
+                      : () {
                     // Navegar a tab de recordatorios
                     Navigator.of(context).popUntil((route) => route.isFirst);
                     // Cambiar a tab recordatorios (requiere acceso al MainNavigator)
@@ -89,7 +100,9 @@ class PlanSuccessScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
+                  onPressed: _isUndoing
+                      ? null
+                      : () {
                     Navigator.of(context).popUntil((route) => route.isFirst);
                   },
                   icon: const Icon(Icons.add),
@@ -99,9 +112,29 @@ class PlanSuccessScreen extends StatelessWidget {
 
               const SizedBox(height: AppSpacing.sm),
 
+              // Botón deshacer: Deshacer plan
+              TextButton.icon(
+                onPressed: _isUndoing ? null : _undoPlan,
+                icon: _isUndoing
+                    ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Icon(Icons.undo),
+                label: const Text('Deshacer este plan'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.sm),
+
               // Botón terciario: Cerrar
               TextButton(
-                onPressed: () {
+                onPressed: _isUndoing
+                    ? null
+                    : () {
                   Navigator.of(context).popUntil((route) => route.isFirst);
                 },
                 child: const Text('Cerrar'),
@@ -111,5 +144,66 @@ class PlanSuccessScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Deshacer plan eliminando todos los recordatorios creados
+  Future<void> _undoPlan() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Deshacer plan?'),
+        content: Text(
+          'Se eliminarán los ${widget.taskCount} recordatorios creados. Esta acción no se puede revertir.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.error,
+            ),
+            child: const Text('Sí, eliminar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isUndoing = true);
+
+    try {
+      // Eliminar cada recordatorio creado
+      for (final reminderId in widget.createdReminderIds) {
+        await MockRemindersRepository.deleteReminder(reminderId);
+      }
+
+      if (!mounted) return;
+
+      // Mostrar confirmación
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Plan eliminado correctamente'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+
+      // Volver al inicio
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error al eliminar plan: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+
+      setState(() => _isUndoing = false);
+    }
   }
 }

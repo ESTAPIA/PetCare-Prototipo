@@ -39,6 +39,42 @@ class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
     _loadPetsAndTemplates();
   }
 
+  /// Verificar si hay mascotas y mostrar modal si no existen
+  Future<void> _checkAndShowNoPetsModal() async {
+    if (_availablePets.isEmpty) {
+      final shouldNavigate = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('Sin mascotas registradas'),
+          content: const Text(
+            'Necesitas registrar una mascota primero para crear un plan de cuidado.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Registrar mascota'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldNavigate == true && mounted) {
+        Navigator.pushNamed(context, '/pet/new').then((_) {
+          // Recargar mascotas después de registrar
+          _loadPetsAndTemplates();
+        });
+      } else if (shouldNavigate == false && mounted) {
+        // Si cancela, volver atrás
+        Navigator.pop(context);
+      }
+    }
+  }
+
   /// Cargar mascotas y luego plantillas
   Future<void> _loadPetsAndTemplates() async {
     setState(() => _isLoadingPets = true);
@@ -51,7 +87,14 @@ class _PlanTemplateListScreenState extends State<PlanTemplateListScreen> {
       _isLoadingPets = false;
     });
 
-    _loadTemplates();
+    // Mostrar modal si no hay mascotas
+    if (pets.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkAndShowNoPetsModal();
+      });
+    } else {
+      _loadTemplates();
+    }
   }
 
   Future<void> _loadTemplates() async {

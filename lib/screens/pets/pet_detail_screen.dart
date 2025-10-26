@@ -37,6 +37,7 @@ class PetDetailScreen extends StatefulWidget {
 
 class _PetDetailScreenState extends State<PetDetailScreen> {
   Pet? _pet;
+  bool _isLoading = true;
   bool _isDeleting = false;
 
   @override
@@ -46,11 +47,30 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
   }
 
   /// Cargar mascota desde repositorio
+  /// 
+  /// Heurística 1: Visibilidad del estado - feedback durante carga
   Future<void> _loadPet() async {
-    final pet = await MockPetsRepository.getPetById(widget.petId);
-    if (mounted) {
+    if (!mounted) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      // Simular delay de red para visibilidad (300ms)
+      await Future.delayed(const Duration(milliseconds: 300));
+      
+      final pet = await MockPetsRepository.getPetById(widget.petId);
+      
+      if (!mounted) return;
+      
       setState(() {
         _pet = pet;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      
+      setState(() {
+        _isLoading = false;
       });
     }
   }
@@ -75,14 +95,15 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
 
   /// Mostrar diálogo de confirmación para eliminar
   /// 
-  /// Heurística 9: Prevención de errores - confirmación antes de acción destructiva
+  /// Heurística 5: Prevención de errores - confirmación antes de acción destructiva
+  /// Heurística 3: Control y libertad - informa que se puede deshacer
   Future<void> _showDeleteConfirmation() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('¿Eliminar a ${_pet!.nombre}?'),
         content: Text(
-          'Esta acción no se puede deshacer. Se eliminarán todos los datos de ${_pet!.nombre}.',
+          'Se eliminará a ${_pet!.nombre} y todos sus datos. Tendrás 4 segundos para deshacer esta acción.',
           style: AppTypography.body,
         ),
         actions: [
@@ -107,37 +128,88 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
     }
   }
 
-  /// Eliminar mascota del repositorio
+  /// Eliminar mascota con opción de deshacer
   /// 
+  /// Heurística 3: Control y libertad - permite deshacer acción destructiva
   /// Heurística 10: Feedback claro de éxito/error
   Future<void> _deletePet() async {
     setState(() => _isDeleting = true);
 
     try {
+      // 1. Guardar copia de la mascota antes de eliminar
+      final petToDelete = _pet!;
+      
+      // 2. Eliminar del repositorio
       final success = await MockPetsRepository.deletePet(widget.petId);
 
       if (!mounted) return;
 
       if (success) {
-        // Mostrar mensaje de éxito
-        ScaffoldMessenger.of(context).showSnackBar(
+        // 3. Navegar de regreso inmediatamente
+        Navigator.pop(context, true);
+
+        // 4. Mostrar SnackBar con acción "Deshacer"
+        // El SnackBar se muestra en el contexto de la pantalla anterior
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                const Icon(Icons.delete_outline, color: Colors.white, size: 20),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text('${_pet!.nombre} eliminado exitosamente'),
+                  child: Text('${petToDelete.nombre} eliminado'),
                 ),
               ],
             ),
-            backgroundColor: AppColors.success,
-            duration: const Duration(seconds: 3),
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'DESHACER',
+              textColor: Colors.white,
+              onPressed: () async {
+                // 5. Restaurar mascota si usuario toca "Deshacer"
+                final restored = await MockPetsRepository.createPet(petToDelete);
+                
+                if (restored) {
+                  // Mostrar confirmación de restauración
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.undo, color: Colors.white, size: 20),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text('${petToDelete.nombre} restaurado'),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: AppColors.success,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                } else {
+                  // Error al restaurar
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                          const SizedBox(width: AppSpacing.sm),
+                          const Expanded(
+                            child: Text('Error al restaurar mascota'),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: AppColors.error,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+            ),
           ),
         );
-
-        // Regresar con true para indicar que se eliminó (recarga lista)
-        Navigator.pop(context, true);
       } else {
         throw Exception('No se pudo eliminar la mascota');
       }
@@ -395,7 +467,37 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Manejo de mascota no encontrada
+    // Estado 1: Cargando
+    // Heurística 1: Visibilidad del estado - feedback visual durante operación
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Cargando...'),
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+        ),
+        backgroundColor: AppColors.background,
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: AppSpacing.lg),
+              Text(
+                'Cargando detalles de la mascota...',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // Estado 2: Mascota no encontrada
     // Heurística 9: Ayudar a reconocer y recuperarse de errores
     if (_pet == null) {
       return Scaffold(
@@ -416,7 +518,7 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
       );
     }
 
-    // Pantalla de detalle normal
+    // Estado 3: Pantalla de detalle normal
     return Scaffold(
       appBar: AppBar(
         title: Text(
