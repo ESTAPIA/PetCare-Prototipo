@@ -20,10 +20,10 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   List<Pet> _pets = [];
   bool _isLoading = true;
   static const String _kOnboardingCompletedKey = 'onboarding_completed';
@@ -34,11 +34,38 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // Estado de estadísticas
   List<Reminder> _allReminders = [];
+  
+  // ScrollController para resetear scroll al presionar tab Inicio
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     // Cargar mascotas, recordatorios y verificar onboarding
+    _initializeScreen();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Método público: Resetear scroll y recargar datos
+  /// 
+  /// Observación del profesor: Al presionar tab Inicio desde otra pantalla,
+  /// debe scrollear al top y actualizar datos
+  void resetToTop() {
+    // Animar scroll al inicio
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+    
+    // Recargar datos
     _initializeScreen();
   }
 
@@ -282,6 +309,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// 
   /// Heurística 1: Visibilidad - todos los pendientes de un vistazo
   /// Heurística 3: Control - acción rápida "Marcar como hecho"
+  /// Heurística 3: Control y libertad - diálogo se mantiene abierto para marcar múltiples
   void _showNotificationsDialog() {
     // Filtrar solo pendientes
     final pending = _allReminders
@@ -293,48 +321,106 @@ class _HomeScreenState extends State<HomeScreen> {
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.notifications_active, color: AppColors.primary),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                'Recordatorios pendientes',
-                style: AppTypography.h2,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm,
-                vertical: AppSpacing.xs,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '${pending.length}',
-                style: AppTypography.bodyBold.copyWith(
-                  color: Colors.white,
-                  fontSize: 14,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Icon(Icons.notifications_active, color: AppColors.primary),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Recordatorios pendientes',
+                  style: AppTypography.h2,
                 ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${pending.length}',
+                  style: AppTypography.bodyBold.copyWith(
+                    color: Colors.white,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: pending.isEmpty
+              ? _buildNoNotificationsContent()
+              : _buildNotificationsList(
+                  pending,
+                  onMarkCompleted: (reminder) async {
+                    // Marcar en repositorio
+                    final success = await MockRemindersRepository.markAsDone(
+                      reminder.id,
+                    );
+                    
+                    if (!success) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text(
+                              'Error al marcar como completado',
+                            ),
+                            backgroundColor: AppColors.error,
+                          ),
+                        );
+                      }
+                      return;
+                    }
+                    
+                    // Actualizar lista dentro del diálogo
+                    setDialogState(() {
+                      pending.removeWhere((r) => r.id == reminder.id);
+                    });
+                    
+                    // Recargar datos globales (fuera del diálogo)
+                    _loadNextReminder();
+                    _loadStatistics();
+                    
+                    // Mostrar feedback
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(
+                                Icons.check_circle,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Text(
+                                  '✓ ${reminder.title} marcado como completado',
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: AppColors.success,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
             ),
           ],
         ),
-        content: pending.isEmpty
-            ? _buildNoNotificationsContent()
-            : _buildNotificationsList(pending),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cerrar'),
-          ),
-        ],
       ),
     );
   }
@@ -374,7 +460,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Lista de recordatorios pendientes con acciones
   /// 
   /// Heurística 3: Control del usuario - acción rápida desde notificación
-  Widget _buildNotificationsList(List<Reminder> pending) {
+  Widget _buildNotificationsList(
+    List<Reminder> pending, {
+    required void Function(Reminder) onMarkCompleted,
+  }) {
     return SizedBox(
       width: double.maxFinite,
       child: ListView.separated(
@@ -429,16 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: AppColors.success,
                 size: 24,
               ),
-              onPressed: () async {
-                // Cerrar diálogo
-                Navigator.pop(context);
-                
-                // Marcar como completado (método ya existe)
-                await _markReminderAsCompleted(reminder);
-                
-                // Recargar estadísticas para actualizar badge
-                await _loadStatistics();
-              },
+              onPressed: () => onMarkCompleted(reminder),
               tooltip: 'Marcar como hecho',
             ),
           );
@@ -699,13 +779,16 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Inicio'),
         automaticallyImplyLeading: false,
         actions: [
-          Badge.count(
-            count: _pendingReminders,
-            isLabelVisible: _pendingReminders > 0,
-            child: IconButton(
-              icon: const Icon(Icons.notifications_outlined),
-              onPressed: _showNotificationsDialog,
-              tooltip: 'Notificaciones',
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: Badge.count(
+              count: _pendingReminders,
+              isLabelVisible: _pendingReminders > 0,
+              child: IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: _showNotificationsDialog,
+                tooltip: 'Notificaciones',
+              ),
             ),
           ),
         ],
@@ -719,6 +802,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ]);
         },
         child: SingleChildScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -927,8 +1011,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Card de mascota individual
   Widget _buildPetCard(Pet pet) {
     return Container(
-      width: 120,
-      margin: const EdgeInsets.only(right: AppSpacing.md),
+      width: 140,
+      margin: const EdgeInsets.only(right: AppSpacing.sm),
       child: AppCard(
         padding: const EdgeInsets.all(AppSpacing.md),
         onTap: () async {
@@ -949,14 +1033,19 @@ class _HomeScreenState extends State<HomeScreen> {
             CircleAvatar(
               radius: 30,
               backgroundColor: AppColors.primary,
-              child: Text(
-                pet.inicial,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.onPrimary,
-                ),
-              ),
+              backgroundImage: pet.imagePath != null
+                  ? AssetImage(pet.imagePath!)
+                  : null,
+              child: pet.imagePath == null
+                  ? Text(
+                      pet.inicial,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.onPrimary,
+                      ),
+                    )
+                  : null,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -985,8 +1074,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Card para agregar nueva mascota
   Widget _buildAddPetCard() {
     return Container(
-      width: 120,
-      margin: const EdgeInsets.only(right: AppSpacing.md),
+      width: 140,
+      margin: const EdgeInsets.only(right: AppSpacing.sm),
       child: AppCard(
         padding: const EdgeInsets.all(AppSpacing.md),
         onTap: () async {

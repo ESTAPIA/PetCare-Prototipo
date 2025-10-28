@@ -46,6 +46,21 @@ class Pet {
     return nombre.isNotEmpty ? nombre[0].toUpperCase() : '?';
   }
 
+  /// Ruta de imagen predefinida según ID de mascota
+  /// 
+  /// Retorna ruta del asset si la mascota tiene imagen asociada,
+  /// null si no tiene imagen (usará inicial como fallback)
+  String? get imagePath {
+    switch (id) {
+      case 'pet-001':
+        return 'assets/images/luna.jpg'; // Luna
+      case 'pet-002':
+        return 'assets/images/max.jpg'; // Max
+      default:
+        return null; // Sin imagen, usar inicial
+    }
+  }
+
   /// Descripción corta para subtítulos (ej. "Perra mestiza, 3 años")
   String get descripcionCorta {
     final partes = <String>[];

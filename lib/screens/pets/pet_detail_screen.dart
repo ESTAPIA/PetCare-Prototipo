@@ -255,17 +255,22 @@ class _PetDetailScreenState extends State<PetDetailScreen> {
       ),
       child: Column(
         children: [
-          // Avatar grande con inicial
+          // Avatar grande con imagen o inicial
           CircleAvatar(
             radius: 40, // 80dp diámetro
             backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-            child: Text(
-              _pet!.inicial,
-              style: AppTypography.h1.copyWith(
-                color: AppColors.primary,
-                fontSize: 32,
-              ),
-            ),
+            backgroundImage: _pet!.imagePath != null
+                ? AssetImage(_pet!.imagePath!)
+                : null,
+            child: _pet!.imagePath == null
+                ? Text(
+                    _pet!.inicial,
+                    style: AppTypography.h1.copyWith(
+                      color: AppColors.primary,
+                      fontSize: 32,
+                    ),
+                  )
+                : null,
           ),
           const SizedBox(height: AppSpacing.md),
 

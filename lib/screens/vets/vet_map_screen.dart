@@ -432,15 +432,20 @@ class _VetMapScreenState extends State<VetMapScreen> {
         title: const Text('Veterinarias'),
         automaticallyImplyLeading: widget.sourceContext != null, // Mostrar back si viene de otra pantalla
         actions: [
+          // Botón limpiar filtros con ícono condicional
+          // H1: Visibilidad - ícono cambia según estado (filter_list_off cuando hay filtros)
+          // H4: Consistencia - convención clara (off = limpiar)
           IconButton(
             icon: _contarFiltrosActivos() > 0
                 ? Badge.count(
                     count: _contarFiltrosActivos(),
-                    child: const Icon(Icons.filter_list),
+                    child: const Icon(Icons.filter_list_off), // ✅ Ícono claro "limpiar"
                   )
-                : const Icon(Icons.filter_list),
-            onPressed: _limpiarFiltros,
-            tooltip: _contarFiltrosActivos() > 0 ? 'Limpiar filtros' : 'Filtros',
+                : const Icon(Icons.filter_list), // Estado sin filtros
+            onPressed: _contarFiltrosActivos() > 0 ? _limpiarFiltros : null,
+            tooltip: _contarFiltrosActivos() > 0 
+                ? 'Limpiar ${_contarFiltrosActivos()} filtro${_contarFiltrosActivos() > 1 ? 's' : ''}' 
+                : 'Sin filtros activos',
           ),
         ],
       ),
@@ -625,31 +630,42 @@ class _VetMapScreenState extends State<VetMapScreen> {
       color: AppColors.surfaceVariant,
       child: Stack(
         children: [
-          // Placeholder del mapa
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.map_outlined,
-                  size: 80,
-                  color: AppColors.textDisabled,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Vista de mapa',
-                  style: AppTypography.h2.copyWith(
-                    color: AppColors.textSecondary,
+          // Imagen de mapa simulado (reemplaza placeholder)
+          // H1: Visibilidad - muestra mapa realista en lugar de ícono genérico
+          // H6: Reconocimiento - usuario identifica mapa visualmente
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/mapa.jpg',
+              fit: BoxFit.cover, // Llena toda el área
+              errorBuilder: (context, error, stackTrace) {
+                // Fallback si imagen no carga
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.map_outlined,
+                        size: 80,
+                        color: AppColors.textDisabled,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text(
+                        'Vista de mapa',
+                        style: AppTypography.h2.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Google Maps se integrará aquí',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textDisabled,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Google Maps se integrará aquí',
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.textDisabled,
-                  ),
-                ),
-              ],
+                );
+              },
             ),
           ),
           

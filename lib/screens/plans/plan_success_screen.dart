@@ -3,6 +3,8 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../data/mock_reminders.dart';
+import '../../navigation/app_routes.dart';
+import '../../navigation/main_navigator.dart';
 
 /// SCR-PLAN-SUCCESS: Confirmación de plan creado
 /// PROC-002: Plan de Cuidado Rápido
@@ -85,9 +87,12 @@ class _PlanSuccessScreenState extends State<PlanSuccessScreen> {
                   onPressed: _isUndoing
                       ? null
                       : () {
-                    // Navegar a tab de recordatorios
+                    // 1. Salir del stack de navegación del tab Plan
                     Navigator.of(context).popUntil((route) => route.isFirst);
-                    // Cambiar a tab recordatorios (requiere acceso al MainNavigator)
+                    
+                    // 2. Cambiar al tab Recordatorios (índice 2)
+                    context.findAncestorStateOfType<MainNavigatorState>()
+                        ?.navigateToTab(AppRoutes.tabReminders);
                   },
                   icon: const Icon(Icons.notifications),
                   label: const Text('Ver recordatorios'),
@@ -103,7 +108,10 @@ class _PlanSuccessScreenState extends State<PlanSuccessScreen> {
                   onPressed: _isUndoing
                       ? null
                       : () {
+                    // Salir del stack y volver al tab Plan
                     Navigator.of(context).popUntil((route) => route.isFirst);
+                    
+                    // Ya estamos en tab Plan (índice 1), solo limpiar stack
                   },
                   icon: const Icon(Icons.add),
                   label: const Text('Crear otro plan'),
@@ -135,7 +143,10 @@ class _PlanSuccessScreenState extends State<PlanSuccessScreen> {
                 onPressed: _isUndoing
                     ? null
                     : () {
+                  // Salir del stack y volver al tab Inicio
                   Navigator.of(context).popUntil((route) => route.isFirst);
+                  context.findAncestorStateOfType<MainNavigatorState>()
+                      ?.navigateToTab(AppRoutes.tabHome);
                 },
                 child: const Text('Cerrar'),
               ),
@@ -191,8 +202,10 @@ class _PlanSuccessScreenState extends State<PlanSuccessScreen> {
         ),
       );
 
-      // Volver al inicio
+      // Volver al tab Inicio
       Navigator.of(context).popUntil((route) => route.isFirst);
+      context.findAncestorStateOfType<MainNavigatorState>()
+          ?.navigateToTab(AppRoutes.tabHome);
     } catch (e) {
       if (!mounted) return;
 

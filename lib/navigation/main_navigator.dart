@@ -85,9 +85,10 @@ class PetCareBottomNavBar extends StatelessWidget {
         ),
 
         // TAB 5: CONSULTA EXPRESS
+        // H6: Reconocimiento - portapapeles médico identifica consulta profesional veterinaria
         BottomNavigationBarItem(
-          icon: Icon(Icons.chat_outlined),
-          activeIcon: Icon(Icons.chat),
+          icon: Icon(Icons.medical_information_outlined),
+          activeIcon: Icon(Icons.medical_information),
           label: 'Consulta',
           tooltip: 'Consulta Express',
         ),
@@ -102,10 +103,10 @@ class MainNavigator extends StatefulWidget {
   const MainNavigator({super.key});
 
   @override
-  State<MainNavigator> createState() => _MainNavigatorState();
+  State<MainNavigator> createState() => MainNavigatorState();
 }
 
-class _MainNavigatorState extends State<MainNavigator> {
+class MainNavigatorState extends State<MainNavigator> {
   /// Índice del tab actualmente activo
   int _currentTabIndex = AppRoutes.tabHome;
 
@@ -118,17 +119,57 @@ class _MainNavigatorState extends State<MainNavigator> {
     GlobalKey<NavigatorState>(), // Tab Consulta
   ];
 
+  /// GlobalKey para acceder al estado de HomeScreen
+  final GlobalKey<HomeScreenState> _homeScreenKey = GlobalKey<HomeScreenState>();
+
   /// Cambiar al tab seleccionado
   void _selectTab(int index) {
     if (_currentTabIndex == index) {
-      // Si toca el tab actual, no hacer nada (comportamiento estándar de apps)
-      // El usuario puede usar el botón "atrás" si quiere regresar a la raíz
+      // Si se toca el tab Inicio estando ya en Inicio, resetear
+      if (index == AppRoutes.tabHome) {
+        _resetHomeScreen();
+      }
+      // Para otros tabs, no hacer nada (comportamiento estándar)
       return;
     } else {
       // Cambiar al nuevo tab
       setState(() {
         _currentTabIndex = index;
       });
+    }
+  }
+
+  /// Cambiar al tab especificado programáticamente
+  /// 
+  /// Método público para que pantallas hijas puedan cambiar de tab
+  /// Útil para navegación desde pantallas como plan_success_screen
+  void navigateToTab(int tabIndex) {
+    if (tabIndex >= 0 && tabIndex < 5 && tabIndex != _currentTabIndex) {
+      setState(() {
+        _currentTabIndex = tabIndex;
+      });
+    }
+  }
+
+  /// Resetear el estado del HomeScreen (scroll al top + recargar datos)
+  /// 
+  /// Observación del profesor: Cuando el usuario presiona "Inicio"
+  /// desde otro tab, debe volver al estado inicial (top de la pantalla)
+  void _resetHomeScreen() {
+    final homeState = _homeScreenKey.currentState;
+    if (homeState != null) {
+      // Verificar que no estamos en rutas de creación/edición
+      final currentNavigator = _navigatorKeys[AppRoutes.tabHome].currentState;
+      final currentRoute = ModalRoute.of(currentNavigator!.context)?.settings.name;
+      
+      // No resetear si estamos en /pet/new o /pet/edit
+      if (currentRoute != null && 
+          (currentRoute.contains('/new') || currentRoute.contains('/edit'))) {
+        return;
+      }
+      
+      // Scrollear al top y refrescar datos
+      homeState.resetToTop();
     }
   }
 
@@ -218,12 +259,15 @@ class _MainNavigatorState extends State<MainNavigator> {
       key: navigatorKey,
       initialRoute: initialRoute,
       onGenerateRoute: (settings) {
-        // Por ahora retornamos placeholders
-        // Mapear rutas a pantallas reales
+        // Bug fix: Si la ruta es '/', usar el initialRoute del tab
+        // Esto ocurre cuando popUntil(route.isFirst) limpia el stack
+        final routeName = (settings.name == null || settings.name == '/') 
+            ? initialRoute 
+            : settings.name!;
+        
         return MaterialPageRoute(
           settings: settings,
-          builder:
-              (context) => _buildScreen(route: settings.name ?? initialRoute),
+          builder: (context) => _buildScreen(route: routeName),
         );
       },
     );
@@ -304,7 +348,7 @@ class _MainNavigatorState extends State<MainNavigator> {
     if (route == AppRoutes.home ||
         route.startsWith('/home') ||
         route.startsWith('/pet')) {
-      return const HomeScreen();
+      return HomeScreen(key: _homeScreenKey);
     }
 
     // Tab Plan: PlanTemplateListScreen como pantalla principal

@@ -43,20 +43,37 @@ class _PlanCustomizeScreenState extends State<PlanCustomizeScreen> {
       appBar: AppBar(
         title: const Text('Personalizar plan'),
         actions: [
-          // Contador de tareas activas
+          // Contador de tareas activas (indicador visual)
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-              child: Text(
-                '$_activeTasksCount activas',
-                style: AppTypography.label.copyWith(color: AppColors.primary),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: AppSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: _activeTasksCount > 0 
+                      ? AppColors.success.withOpacity(0.1)
+                      : AppColors.warning.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+                  border: Border.all(
+                    color: _activeTasksCount > 0 
+                        ? AppColors.success
+                        : AppColors.warning,
+                  ),
+                ),
+                child: Text(
+                  '$_activeTasksCount activas',
+                  style: AppTypography.label.copyWith(
+                    color: _activeTasksCount > 0 
+                        ? AppColors.success
+                        : AppColors.warning,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
-          ),
-          // Botón continuar
-          TextButton(
-            onPressed: _activeTasksCount > 0 ? _onContinue : null,
-            child: const Text('Continuar'),
           ),
         ],
       ),
@@ -70,6 +87,9 @@ class _PlanCustomizeScreenState extends State<PlanCustomizeScreen> {
 
           // Mensaje si no hay tareas activas
           if (_activeTasksCount == 0) _buildNoTasksWarning(),
+
+          // Botón inferior sticky para continuar
+          _buildBottomButton(),
         ],
       ),
     );
@@ -222,6 +242,45 @@ class _PlanCustomizeScreenState extends State<PlanCustomizeScreen> {
     );
   }
 
+  /// Botón inferior sticky para continuar a revisión
+  /// 
+  /// Heurística 1: Visibilidad - botón principal siempre visible
+  /// Heurística 4: Consistencia - mismo patrón que plan_review_screen
+  Widget _buildBottomButton() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _activeTasksCount > 0 ? _onContinue : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.success,
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            ),
+            icon: const Icon(Icons.check_circle_outline),
+            label: Text(
+              _activeTasksCount > 0
+                  ? 'Revisar plan ($_activeTasksCount tareas)'
+                  : 'Activa al menos 1 tarea',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Mensaje de advertencia si no hay tareas activas
   Widget _buildNoTasksWarning() {
     return Container(
@@ -360,6 +419,8 @@ class _PlanCustomizeScreenState extends State<PlanCustomizeScreen> {
   }
 
   /// Continuar a revisión del plan
+  /// 
+  /// Heurística 3: Control - permite revisar antes de confirmar
   void _onContinue() {
     // Filtrar solo tareas activas
     final activeTasks = _tasks.where((t) => t.isActive).toList();

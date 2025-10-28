@@ -307,24 +307,13 @@ class _VetDetailScreenState extends State<VetDetailScreen> {
         ),
         actions: [
           // Favorito
+          // H8: Minimalismo - solo funcionalidad real visible
           IconButton(
             icon: Icon(_isFavorite ? Icons.star : Icons.star_outline),
             onPressed: _toggleFavorite,
             tooltip: 'Favorito',
           ),
-          // Compartir (placeholder)
-          IconButton(
-            icon: const Icon(Icons.share),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Compartir disponible en próxima versión'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            tooltip: 'Compartir',
-          ),
+          // Botón "Compartir" eliminado (H5: Prevención de errores - no ofrecer opciones no funcionales)
         ],
       ),
       body: SingleChildScrollView(
